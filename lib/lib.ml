@@ -46,6 +46,7 @@ let validate_protocols_exn (ast : scr_module) : unit =
   show ~f:(fun (g, _) -> Gtype.show g) g_types ;
   if Config.refinement_type_enabled () then
     List.iter ~f:(fun (g, _) -> Gtype.validate_refinements_exn g) g_types ;
+  if Config.check_directed_choice () then 
   let l_types =
     List.map
       ~f:(fun (g, roles) ->
@@ -138,11 +139,27 @@ let generate_fsm ast ~protocol ~role =
   let lt = project_role ast ~protocol ~role in
   Efsm.of_local_type lt
 
+let generate_routed_fsm ast ~protocol ~role ~server =
+  let gp =
+    match
+      List.find
+        ~f:(fun gt ->
+          ProtocolName.equal (ProtocolName.of_name gt.value.name) protocol)
+        ast.protocols
+    with
+    | Some gp -> gp
+    | None -> uerr (ProtocolNotFound protocol)
+  in
+  let gp = Protocol.expand_global_protocol ast gp in
+  let gt = Gtype.of_protocol gp in
+  let _ = Chorautomata.of_global_type gt in
+  Routedfsm.of_global_type gt ~role ~server
+
 let generate_go_code = Gocodegen.generate_go_code
 
-let generate_ocaml_code ~monad ast ~protocol ~role =
+(*let generate_ocaml_code ~monad ast ~protocol ~role =
   let fsm = generate_fsm ast ~protocol ~role in
-  Ocamlcodegen.gen_code ~monad (protocol, role) fsm
+  Ocamlcodegen.gen_code ~monad (protocol, role) fsm*)
 
 let generate_sexp ast ~protocol =
   let gp =
@@ -160,9 +177,9 @@ let generate_sexp ast ~protocol =
   let gtype = Gtype.normalise gtype in
   Sexp.to_string_hum (Gtype.sexp_of_t gtype)
 
-let generate_ast ~monad ast ~protocol ~role =
+(*let generate_ast ~monad ast ~protocol ~role =
   let fsm = generate_fsm ast ~protocol ~role in
-  Ocamlcodegen.gen_ast ~monad (protocol, role) fsm
+  Ocamlcodegen.gen_ast ~monad (protocol, role) fsm*)
 
 let generate_fstar_code ast ~protocol ~role =
   let lt = project_role ast ~protocol ~role in

@@ -1,7 +1,8 @@
 open! Base
 
 type t =
-  { solver_show_queries: bool
+  { check_directed_choice: bool 
+  ; solver_show_queries: bool
   ; nested_protocol_enabled: bool
   ; refinement_type_enabled: bool
   ; sender_validate_refinements: bool
@@ -9,7 +10,8 @@ type t =
   ; verbose: bool }
 
 let default =
-  { solver_show_queries= false
+  { check_directed_choice= false 
+  ; solver_show_queries= false
   ; nested_protocol_enabled= false
   ; refinement_type_enabled= false
   ; sender_validate_refinements= false
@@ -17,6 +19,8 @@ let default =
   ; verbose= false }
 
 let config = ref default
+
+let check_directed_choice () = !config.check_directed_choice
 
 let solver_show_queries () = !config.solver_show_queries
 

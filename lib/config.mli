@@ -1,6 +1,8 @@
 (** This module contains variables configuarations, to be set by pragmas or
     command line arguments, not to be changed for the duration of the program *)
 
+val check_directed_choice : unit -> bool
+
 val solver_show_queries : unit -> bool
 (** Whether to display queries to SMT solvers (with RefinementTypes pragma) *)
 

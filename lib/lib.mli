@@ -40,6 +40,13 @@ val generate_fsm :
     [(v, g)] where [g] is the graph describing the fsm, and [v] is the root
     index. *)
 
+val generate_routed_fsm :
+     Syntax.scr_module
+  -> protocol:ProtocolName.t
+  -> role:RoleName.t
+  -> server:RoleName.t
+  -> int * Routedfsm.t
+
 val generate_go_code :
      Syntax.scr_module
   -> protocol:ProtocolName.t
@@ -54,12 +61,12 @@ val generate_go_code :
     [go_path] is the path to the project root, which can optionally be
     provided in order to write the implementation to the file system. *)
 
-val generate_ocaml_code :
+(*val generate_ocaml_code :
      monad:bool
   -> Syntax.scr_module
   -> protocol:ProtocolName.t
   -> role:RoleName.t
-  -> string
+  -> string*)
 (** [generate_code ~monad module protocol role] generates event-style OCaml
     code for the [role] in [protocol], inside a [module] [monad] indicates
     whether the generated code uses a monad for transport (e.g. Lwt, Async) *)
@@ -69,12 +76,12 @@ val generate_sexp : Syntax.scr_module -> protocol:ProtocolName.t -> string
     code for the [role] in [protocol], inside a [module] [monad] indicates
     whether the generated code uses a monad for transport (e.g. Lwt, Async) *)
 
-val generate_ast :
+(*val generate_ast :
      monad:bool
   -> Syntax.scr_module
   -> protocol:ProtocolName.t
   -> role:RoleName.t
-  -> Ppxlib_ast.Parsetree.structure
+  -> Ppxlib_ast.Parsetree.structure*)
 (** [generate_ast ~monad module protocol role] is similar to [generate_code],
     except it returns an AST instead of a string *)
 

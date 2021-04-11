@@ -3,6 +3,11 @@ open Loc
 open Names
 
 type user_error =
+  | WellBranchednessError of RoleName.t * RoleName.t
+  | BranchErrorPrevious of RoleName.t * RoleName.t
+  | BranchErrorNew of RoleName.t * (RoleName.t list)
+  | ChorAutomataNotWellSequencedDueToNonDisjointParticipants
+  | ChorAutomataNotWellSequencedOverRecursion of TypeVariableName.t
   | UnknownPragma of string
   | IncompatibleFlag of string * string
   | MissingFlag of string * string
@@ -38,6 +43,22 @@ exception UserError of user_error
 [@@deriving sexp_of]
 
 let show_user_error = function
+  | WellBranchednessError (rc, r) ->
+      "In a choice, as per Def. 4.6 (3) of the Choreography Automata paper, for each possible pair of branches "
+      ^ "of a projected role B (apart from the choice-maker), the first pair of different labels must be of the form "
+      ^ "(CB?m, DB?n), with C not equal to D or m not equal to n. There are special cases for cycles: see paper. "
+      ^ "Detected for choice-maker " ^ RoleName.user rc ^ " and role " ^ RoleName.user r
+  | BranchErrorPrevious (rc, r) -> 
+      "In a choice, each previously active role must be present in either none or all of the branches. "
+      ^ "In the latter case, the first message the role receives must be distinct and from the choice-maker. "
+      ^ "Detected for choice-maker " ^ RoleName.user rc ^ " and previously active role " ^ RoleName.user r
+  | BranchErrorNew (rc, rs) -> 
+      let err_role_list = String.concat ~sep:", " @@ List.map ~f:RoleName.user rs in
+      "In a choice, each newly active role must receive a distinct message from the chooser. "
+      ^ "Violation detected for choice-maker " ^ RoleName.user rc ^ ", " 
+      ^ "in the branch that activates role(s): " ^ err_role_list
+  | ChorAutomataNotWellSequencedDueToNonDisjointParticipants -> "Choreography automaton's sub-automata's sets of participants are not disjoint"
+  | ChorAutomataNotWellSequencedOverRecursion tvar -> "Not well-sequenced over recursive variable " ^ TypeVariableName.user tvar
   | UnknownPragma prg -> "Unknown pragma: " ^ prg
   | IncompatibleFlag (flag, pragma) ->
       "Incompatible flag: " ^ flag ^ " set with pragma: " ^ pragma

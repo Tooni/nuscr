@@ -45,7 +45,7 @@ val generate_routed_fsm :
   -> protocol:ProtocolName.t
   -> role:RoleName.t
   -> server:RoleName.t
-  -> int * Routedfsm.t
+  -> int * Routedefsm.t
 
 val generate_go_code :
      Syntax.scr_module

@@ -66,7 +66,7 @@ let main file enumerate verbose go_path out_dir project fsm routed_fsm(*gencode_
     let () =
       gen_output_for_routed_fsm ast
         (fun ast protocol role server ->
-          Lib.generate_routed_fsm ast ~protocol ~role ~server |> snd |> Routedfsm.show)
+          Lib.generate_routed_fsm ast ~protocol ~role ~server |> snd |> Routedefsm.show)
           routed_fsm
     (*in
     let () =

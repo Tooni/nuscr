@@ -47,21 +47,21 @@ let validate_protocols_exn (ast : scr_module) : unit =
   if Config.refinement_type_enabled () then
     List.iter ~f:(fun (g, _) -> Gtype.validate_refinements_exn g) g_types ;
   if Config.check_directed_choice () then 
-  let l_types =
-    List.map
-      ~f:(fun (g, roles) ->
-        List.map ~f:(fun r -> Ltype.project (RoleName.of_name r) g) roles )
-      g_types
-  in
-  show
-    ~f:(fun ls -> String.concat ~sep:"\n" (List.map ~f:Ltype.show ls))
-    l_types ;
-  let efsmss = List.map ~f:(List.map ~f:Efsm.of_local_type) l_types in
-  show
-    ~f:(fun efsms ->
-      String.concat ~sep:"\n" (List.map ~f:(fun (_, g) -> Efsm.show g) efsms)
-      )
-    efsmss
+    let l_types =
+      List.map
+        ~f:(fun (g, roles) ->
+          List.map ~f:(fun r -> Ltype.project (RoleName.of_name r) g) roles )
+        g_types
+    in
+    show
+      ~f:(fun ls -> String.concat ~sep:"\n" (List.map ~f:Ltype.show ls))
+      l_types ;
+    let efsmss = List.map ~f:(List.map ~f:Efsm.of_local_type) l_types in
+    show
+      ~f:(fun efsms ->
+        String.concat ~sep:"\n" (List.map ~f:(fun (_, g) -> Efsm.show g) efsms)
+        )
+      efsmss
 
 let validate_nested_protocols (ast : scr_module) =
   let show ~f ~sep input =
@@ -153,7 +153,7 @@ let generate_routed_fsm ast ~protocol ~role ~server =
   let gp = Protocol.expand_global_protocol ast gp in
   let gt = Gtype.of_protocol gp in
   let _ = Chorautomata.of_global_type gt in
-  Routedfsm.of_global_type gt ~role ~server
+  Routedefsm.of_global_type gt ~role ~server
 
 let generate_go_code = Gocodegen.generate_go_code
 

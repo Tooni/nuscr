@@ -124,8 +124,9 @@ let of_global_type gty =
       (*let prev_str (start_id, c, (s, r)) = "(" ^ Int.to_string start_id ^ "," ^ Int.to_string c ^ " , " ^ RoleName.user s ^ "," ^ RoleName.user r ^ ")" in 
       let prevs_str prevs = "\n" ^ String.concat ~sep:"__" (List.map ~f:prev_str prevs) ^ "\n" in*)
       let a = MsgA (send_n, m, recv_n) in
-      let (prev, curr, prevs) =  
-        (match (List.find prevs ~f:(fun (_, _, (s, r)) -> RoleName.equal send_n s || RoleName.equal send_n r)) with
+      let (prev, curr, prevs) = 
+        let prev_search = List.find prevs ~f:(fun (_, _, (s, r)) -> RoleName.equal send_n s || RoleName.equal send_n r) in
+        (match prev_search with
           | Some (start_id, prev, (s, r)) ->
             let prev_equality (start_id2, prev2, (s2, r2)) = 
               not (Int.equal start_id start_id2 && Int.equal prev prev2 &&
@@ -168,8 +169,8 @@ let of_global_type gty =
       let tyvars = 
         (if !count = 0 then
           (tv, [])
-        else 
-          let rec_states = List.fold ~init:[] ~f:(fun sts (id, p, _) ->  (id, p) :: sts) prevs in
+        else
+          let rec_states = List.map prevs ~f:(fun (id, p, _) ->  (id, p)) in
           (tv, rec_states))
         :: tyvars
       in
@@ -237,12 +238,14 @@ let of_global_type gty =
       Int.equal sum_of_cardinalities cardinality_of_union
     in
     if chor_automata_have_disjoint_participants then
-      (Caml.Format.print_string "\nTHIS CHOREOGRAPHY AUTOMATON'S SUB-AUTOMATA HAVE DISJOINT PARTICIPANTS\n\n")
+      ()
+      (*(Caml.Format.print_string "\nTHIS CHOREOGRAPHY AUTOMATON'S SUB-AUTOMATA HAVE DISJOINT PARTICIPANTS\n\n")*)
     else 
+      (*(Caml.Format.print_string (show g ^ "\n\n")*)
       uerr ChorAutomataNotWellSequencedDueToNonDisjointParticipants
     ; if not @@ List.is_empty env.states_to_merge then
       let rec aux (start, g) = function
-        | [] -> (Caml.Format.print_string (show g ^ "\n\n") ; g)
+        | [] -> (*(Caml.Format.print_string (show g ^ "\n\n") ;*) g
         | (s1, s2) :: rest ->
             let to_state = Int.min s1 s2 in
             let from_state = Int.max s1 s2 in
@@ -261,5 +264,5 @@ let of_global_type gty =
       in
       (*i think 'start' is here to guarantee merges happen in certain order? Might be important for choice*)
       aux (0, g) env.states_to_merge
-    else (Caml.Format.print_string (show g ^ "\n\n") ; g)
+    else (*(Caml.Format.print_string (show g ^ "\n\n") ; *)g
     

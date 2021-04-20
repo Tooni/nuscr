@@ -8,15 +8,22 @@ open Err
 type action =
   | SendA of RoleName.t * Gtype.message
   | RecvA of RoleName.t * Gtype.message
+  | SendAWithNewRoles of RoleName.t * RoleName.t list * Gtype.message
+  | RecvAWithNewRoles of RoleName.t * RoleName.t list * Gtype.message
   | Epsilon
 [@@deriving ord, sexp_of]
 
 let rec show_action =
+  let get_role_list roles = String.concat ~sep:"," (List.map ~f:RoleName.user roles) in
   function
   | SendA (r, msg) ->
       sprintf "%s!%s" (RoleName.user r) (Gtype.show_message msg)
   | RecvA (r, msg) ->
       sprintf "%s?%s" (RoleName.user r) (Gtype.show_message msg)
+  | SendAWithNewRoles (r, rs, msg) ->
+    sprintf "%s!%s.%s" (RoleName.user r) (Gtype.show_message msg) (get_role_list rs)
+  | RecvAWithNewRoles (r, rs, msg) ->
+    sprintf "%s?%s.%s" (RoleName.user r) (Gtype.show_message msg) (get_role_list rs)
   | Epsilon -> "ε"
 
 module Label = struct
@@ -69,7 +76,7 @@ let show g =
 
 type efsm_conv_env =
   { g: G.t
-  ; tyvars: (TypeVariableName.t * (int * ((RoleName.t, RoleName.comparator_witness) Set.t))) list
+  ; tyvars: (TypeVariableName.t * int) list
   ; states_to_merge: (int * int) list
   ; active_roles: (RoleName.t, RoleName.comparator_witness) Set.t
   ; role_activations: (RoleName.t * RoleName.t * (message * int)) list }
@@ -119,9 +126,11 @@ let of_global_type gty ~role ~server =
     count := n + 1 ;
     n
   in
+  let seen_choice = ref false in
+  let mandatory_active_roles = ref (Set.add (Set.empty (module RoleName)) server) in
+  let optional_active_roles = ref (Set.empty (module RoleName)) in
   let terminal = ref ~-1 in
-  let first_active_role = ref server in
-  let rec conv_gtype_aux first_active_role env=
+  let rec conv_gtype_aux env=
     let {g; tyvars; active_roles; role_activations; _} = env in
     let terminate () = 
       if !terminal = ~-1 then
@@ -136,9 +145,10 @@ let of_global_type gty ~role ~server =
     | EndG ->
       terminate ()
     | MessageG (m, send_n, recv_n, l) -> (
-      (if RoleName.equal !first_active_role server then
-        (*(Caml.Format.print_string (RoleName.user (if RoleName.equal send_n server then recv_n else send_n))) ;*)
-        first_active_role := (if RoleName.equal send_n server then recv_n else send_n))
+      if not @@ !seen_choice then (
+        mandatory_active_roles := Set.add !mandatory_active_roles send_n
+        ; mandatory_active_roles := Set.add !mandatory_active_roles recv_n
+      )
       ; let active_roles = Set.add active_roles recv_n in
       let active_roles = Set.add active_roles send_n in
       match role with
@@ -147,7 +157,7 @@ let of_global_type gty ~role ~server =
         let curr = fresh () in
         let a = SendA (recv_n, m) in
         let role_activations = role_activations @ [(send_n, recv_n, (m, curr))] in 
-        let env, next = conv_gtype_aux first_active_role {env with active_roles; role_activations} l in
+        let env, next = conv_gtype_aux {env with active_roles; role_activations} l in
         let e = (curr, a, next) in
         let g = env.g in
         let g = G.add_vertex g curr in
@@ -158,7 +168,7 @@ let of_global_type gty ~role ~server =
         let curr = fresh () in
         let a = RecvA (send_n, m) in
         let role_activations = role_activations @ [(send_n, recv_n, (m, curr))] in 
-        let env, next = conv_gtype_aux first_active_role {env with active_roles; role_activations} l in
+        let env, next = conv_gtype_aux {env with active_roles; role_activations} l in
         let e = (curr, a, next) in
         let g = env.g in
         let g = G.add_vertex g curr in
@@ -167,29 +177,33 @@ let of_global_type gty ~role ~server =
       | _ ->
         (*(Caml.Format.print_string ("other\n")) ;*)
         let role_activations = role_activations @ [(send_n, recv_n, (m, !count))] in
-        conv_gtype_aux first_active_role {env with active_roles; role_activations} l
+        conv_gtype_aux {env with active_roles; role_activations} l
     )
     | MuG (tv, _, l) ->
       let new_st = fresh () in
       let g = G.add_vertex g new_st in
-      let env = {env with tyvars= (tv, (new_st, active_roles)) :: tyvars; g} in
-      let env, curr = conv_gtype_aux first_active_role env l in
+      let env = {env with tyvars= (tv, new_st) :: tyvars; g} in
+      let env, curr = conv_gtype_aux env l in
       let g = env.g in
       let g = G.add_edge_e g (new_st, Epsilon, curr) in
       let states_to_merge = (new_st, curr) :: env.states_to_merge in
       ({env with g; states_to_merge}, curr)
     | TVarG (tv, _, _) ->
       (*(Caml.Format.print_string ("tyvar\n")) ;*)
-      (*st, prior_active_roles -- may need prior_active_roles to know whether to dc? *)
-      let st, _ = List.Assoc.find_exn ~equal:TypeVariableName.equal env.tyvars tv in
+      let st = List.Assoc.find_exn ~equal:TypeVariableName.equal env.tyvars tv in
         (env, st)
     | ChoiceG (chooser, ls) ->
-      let curr = fresh () in
+      let active_roles = Set.add active_roles chooser in
+      if Int.equal !count 1 then (* if no msgs before first choice *)
+        mandatory_active_roles := Set.add !mandatory_active_roles chooser
+      ; seen_choice := true
+      
+      ; let curr = fresh () in
       let choice_active_rs = ref [] in
       let choice_r_activations:((RoleName.t * RoleName.t * (message * state)) list list ref) = ref [] in
       let env, nexts = List.fold_map ~f:(
         fun e l ->
-          let acc_env, acc_n = conv_gtype_aux first_active_role e l in
+          let acc_env, acc_n = conv_gtype_aux e l in
           choice_active_rs := !choice_active_rs @ [acc_env.active_roles]
             ; choice_r_activations := !choice_r_activations @ [acc_env.role_activations] 
             ; {acc_env with active_roles; role_activations= []}, acc_n
@@ -220,8 +234,8 @@ let of_global_type gty ~role ~server =
             RoleName.equal s ar || RoleName.equal r ar))
       in
       
-      (* check that active_roles size is greater than 1, i.e. it's not just server *)
-      Set.iter active_roles (* check over previous active roles *)
+      (* check over previous active roles *)
+      Set.iter active_roles 
         ~f:(fun ar -> 
           if not @@ first_msg_is_distinct_and_from_chooser ar !choice_r_activations 
             && not @@ role_does_nothing_in_all_branches ar !choice_r_activations then
@@ -229,7 +243,8 @@ let of_global_type gty ~role ~server =
           )
                                                  
       ; let new_rs = List.map ~f:(fun l_rs -> Set.diff l_rs active_roles) !choice_active_rs in
-      let ars_and_ras = List.zip_exn new_rs !choice_r_activations in
+      optional_active_roles := Set.union !optional_active_roles (Set.union_list (module RoleName) new_rs)
+      ; let ars_and_ras = List.zip_exn new_rs !choice_r_activations in
       List.iter ~f:(fun (ars, ras) ->
         (* check over newly active roles *)
         if not @@ Set.for_all ~f:(fun r -> first_msg_is_distinct_and_from_chooser r [ras]) ars then
@@ -240,7 +255,6 @@ let of_global_type gty ~role ~server =
       (* don't do epsilon transition if next state is terminal *)
       (* this is for when a role is used (and becomes active) in one branch but not in another *)
       (* only works due to non-tail recursive limitation *)
-      (* will have to think of something else should that change *)
       let non_terminal_nexts = List.filter ~f:(fun next -> next <> !terminal) nexts in
       let es = List.map ~f:(fun n -> (curr, Epsilon, n)) non_terminal_nexts in
 
@@ -250,7 +264,6 @@ let of_global_type gty ~role ~server =
           List.map ~f:(fun next -> (curr, next)) non_terminal_nexts @ env.states_to_merge
       in
 
-      let active_roles = Set.add active_roles chooser in
       let rec get_ordered_role_activations' result ras =
         (* ordered flattening *)
         (* e.g. [[1,2,3,4],[a,b,c],[x,y]] --> [1,a,x,2,b,y,3,c,4] *)
@@ -269,15 +282,17 @@ let of_global_type gty ~role ~server =
       let role_activations = role_activations @ (get_ordered_role_activations !choice_r_activations) in
       ({env with g; states_to_merge; active_roles; role_activations}, curr)
     | CallG (_, _, _, l) ->
-      conv_gtype_aux first_active_role env l
+      conv_gtype_aux env l
   in
   let init_env = init_efsm_conv_env in
   let init_active_roles = Set.add init_env.active_roles server in
-  let env, start = conv_gtype_aux first_active_role {init_env with active_roles=init_active_roles} gty in
+  let env, start = conv_gtype_aux {init_env with active_roles=init_active_roles} gty in
+  let optional_active_roles_list = Set.to_list !optional_active_roles in
+  let mandatory_active_roles_list = Set.to_list !mandatory_active_roles in
   let g = env.g in
   if not @@ List.is_empty env.states_to_merge then
     let rec aux (start, g) = function
-      | [] -> (start, g)
+      | [] -> ((start, g), (mandatory_active_roles_list, optional_active_roles_list))
       | (s1, s2) :: rest ->
           let to_state = Int.min s1 s2 in
           let from_state = Int.max s1 s2 in
@@ -295,4 +310,4 @@ let of_global_type gty ~role ~server =
           aux (start, g) rest
     in
     aux (start, g) env.states_to_merge
-  else (start, g)
+  else ((start, g), (mandatory_active_roles_list, optional_active_roles_list))

@@ -262,7 +262,6 @@ let of_global_type gty =
             in
             aux (start, g) rest
       in
-      (*i think 'start' is here to guarantee merges happen in certain order? Might be important for choice*)
       aux (0, g) env.states_to_merge
-    else (*(Caml.Format.print_string (show g ^ "\n\n") ; *)g
+    else (*(Caml.Format.print_string (show g ^ "\n\n") ;*) g
     

@@ -61,7 +61,7 @@
    "A toolkit to manipulate Scribble-style multiparty protocols, based on classical multiparty session type theory. The toolkit provides means to define global protocols, project to local protocols, convert local protocols to a CFSM representation, and generate OCaml code for protocol implementations.")
  (depends
   (nuscr
-   (= :version))
+   (= 1.1.0))
   dune
   (js_of_ocaml
    (>= 3.5.0))

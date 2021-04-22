@@ -10,7 +10,7 @@ type t =
   ; verbose: bool }
 
 let default =
-  { check_directed_choice= false 
+  { check_directed_choice= true 
   ; solver_show_queries= false
   ; nested_protocol_enabled= false
   ; refinement_type_enabled= false

@@ -108,7 +108,7 @@ let enumerate (ast : scr_module) : (ProtocolName.t * RoleName.t) list =
   if Config.nested_protocol_enabled () then enumerate_nested_protocols ast
   else enumerate_protocols ast
 
-let project_protocol_role ast ~protocol ~role : Ltype.t =
+let get_global_type ast ~protocol : Gtype.t =
   let gp =
     match
       List.find
@@ -119,9 +119,10 @@ let project_protocol_role ast ~protocol ~role : Ltype.t =
     | Some gp -> gp
     | None -> uerr (ProtocolNotFound protocol)
   in
-  let gp = Protocol.expand_global_protocol ast gp in
-  let gt = Gtype.of_protocol gp in
-  Ltype.project role gt
+  Protocol.expand_global_protocol ast gp |> Gtype.of_protocol
+
+let project_protocol_role ast ~protocol ~role : Ltype.t =
+  get_global_type ast ~protocol |> Ltype.project role
 
 let project_nested_protocol ast ~protocol ~role : Ltype.t =
   let global_t = Gtype.global_t_of_module ast in
@@ -157,9 +158,9 @@ let generate_routed_fsm ast ~protocol ~role ~server =
 
 let generate_go_code = Gocodegen.generate_go_code
 
-(*let generate_ocaml_code ~monad ast ~protocol ~role =
+let generate_ocaml_code ~monad ast ~protocol ~role =
   let fsm = generate_fsm ast ~protocol ~role in
-  Ocamlcodegen.gen_code ~monad (protocol, role) fsm*)
+  Ocamlcodegen.gen_code ~monad (protocol, role) fsm
 
 let generate_sexp ast ~protocol =
   let gp =
@@ -177,9 +178,9 @@ let generate_sexp ast ~protocol =
   let gtype = Gtype.normalise gtype in
   Sexp.to_string_hum (Gtype.sexp_of_t gtype)
 
-(*let generate_ast ~monad ast ~protocol ~role =
+let generate_ast ~monad ast ~protocol ~role =
   let fsm = generate_fsm ast ~protocol ~role in
-  Ocamlcodegen.gen_ast ~monad (protocol, role) fsm*)
+  Ocamlcodegen.gen_ast ~monad (protocol, role) fsm
 
 let generate_fstar_code ast ~protocol ~role =
   let lt = project_role ast ~protocol ~role in

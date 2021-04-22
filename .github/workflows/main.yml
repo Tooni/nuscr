@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [ develop ]
+  pull_request:
+    branches: [ develop ]
+
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install z3 and others
+        run: |
+          sudo apt-get update
+          sudo apt-get install z3 m4 -y
+          z3 --version
+          which z3
+
+      - name: Use OCaml 4.11.1
+        uses: avsm/setup-ocaml@v1
+        with:
+          ocaml-version: 4.11.1
+
+      - run: opam install -dt . --deps-only
+
+      - name: Build
+        run: |
+          eval $(opam config env)
+          dune build
+
+      - name: Test
+        run: |
+          eval $(opam config env)
+          dune runtest
+

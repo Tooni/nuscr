@@ -11,12 +11,16 @@ let avoid =
   ; "examples/from-scribble-java/tmp/Test2.nuscr"
   ; "examples/from-scribble-java/demo/supplierinfo/SupplierInfoExper.nuscr"
   ; "examples/consensus/ClockTR.nuscr"
+  ; "examples/errors/ClockTR.nuscr"
   ; "examples/consensus/ClockAnnotTR.nuscr"
+  ; "examples/errors/ClockAnnotTR.nuscr"
   ; "examples/consensus/ClockAnnotRec.nuscr"
   ; "examples/from-scribble-java/test/test5/Test5.nuscr"
   ; "examples/from-scribble-java/test/test8/Test8.nuscr"
   ; "examples/from-scribble-java/test/foo/Foo.nuscr"
-  ; "examples/from-scribble-java/demo/fase17/overview/P1.nuscr" ]
+  ; "examples/from-scribble-java/demo/fase17/overview/P1.nuscr" 
+  ; "examples/errors/Scratch1.nuscr"
+  ; "examples/TODO/errors/MergeRec.nuscr" ]
 
 let get_files (dir : string) : string list =
   let rec loop res = function

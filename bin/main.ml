@@ -31,8 +31,8 @@ let gen_output ast f = function
       print_endline res
   | _ -> ()
 
-let main file enumerate verbose go_path out_dir project fsm routed_fsm(*gencode_ocaml
-    gencode_monadic_ocaml*) gencode_go gencode_fstar sexp_global_type
+let main file enumerate verbose go_path out_dir project fsm routed_fsm gencode_ocaml
+    gencode_monadic_ocaml gencode_go gencode_fstar sexp_global_type
     show_solver_queries =
   Config.set_solver_show_queries show_solver_queries ;
   Config.set_verbose verbose ;
@@ -71,7 +71,7 @@ let main file enumerate verbose go_path out_dir project fsm routed_fsm(*gencode_
           Routedefsm.show g ^ "\n\nmandatory: " ^ get_role_list mandatory ^ "\noptional: " ^ get_role_list optional
           )
           routed_fsm
-    (*in
+    in
     let () =
       Option.iter
         ~f:(fun (role, protocol) ->
@@ -84,7 +84,7 @@ let main file enumerate verbose go_path out_dir project fsm routed_fsm(*gencode_
         ~f:(fun (role, protocol) ->
           Lib.generate_ocaml_code ~monad:true ast ~protocol ~role
           |> print_endline )
-        gencode_monadic_ocaml*)
+        gencode_monadic_ocaml
     in
     let () =
       Option.iter
@@ -202,7 +202,7 @@ let routed_fsm =
   Arg.(
     value & opt (some routed_fsm_role_proto) None & info ["routed_fsm"] ~doc ~docv:"ROLE@SERVER@PROTO")
 
-(*let gencode_ocaml =
+let gencode_ocaml =
   let doc =
     "Generate OCaml code for specified protocol and role. \
      <role_name>@<protocol_name>"
@@ -210,7 +210,7 @@ let routed_fsm =
   Arg.(
     value
     & opt (some role_proto) None
-    & info ["gencode-ocaml"] ~doc ~docv:"ROLE@PROTO")*)
+    & info ["gencode-ocaml"] ~doc ~docv:"ROLE@PROTO")
 
 let gencode_fstar =
   let doc =
@@ -222,7 +222,7 @@ let gencode_fstar =
     & opt (some role_proto) None
     & info ["gencode-fstar"] ~doc ~docv:"ROLE@PROTO")
 
-(*let gencode_monadic_ocaml =
+let gencode_monadic_ocaml =
   let doc =
     "Generate monadic OCaml code for specified protocol and role. \
      <role_name>@<protocol_name>"
@@ -230,7 +230,7 @@ let gencode_fstar =
   Arg.(
     value
     & opt (some role_proto) None
-    & info ["gencode-ocaml-monadic"] ~doc ~docv:"ROLE@PROTO")*)
+    & info ["gencode-ocaml-monadic"] ~doc ~docv:"ROLE@PROTO")
 
 let gencode_go =
   let doc =
@@ -283,7 +283,7 @@ let cmd =
   ( Term.(
       ret
         ( const main $ file $ enumerate $ verbose $ go_path $ out_dir
-        $ project $ fsm $ routed_fsm $ (*gencode_ocaml $ gencode_monadic_ocaml $*) gencode_go
+        $ project $ fsm $ routed_fsm $ gencode_ocaml $ gencode_monadic_ocaml $ gencode_go
         $ gencode_fstar $ sexp_global_type $ show_solver_queries ))
   , Term.info "nuscr" ~version:"%%VERSION%%" ~doc ~exits:Term.default_exits
       ~man )

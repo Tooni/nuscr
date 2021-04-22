@@ -1,4 +1,4 @@
-(*open! Base
+open! Base
 open Printf
 open! Ppxlib_ast
 open Parsetree
@@ -315,4 +315,4 @@ let gen_code ?(monad = false) (proto, role) (start, g) =
   let ast = gen_ast ~monad (proto, role) (start, g) in
   Pprintast.structure formatter ast ;
   Caml.Format.pp_print_flush formatter () ;
-  Buffer.contents buffer*)
+  Buffer.contents buffer

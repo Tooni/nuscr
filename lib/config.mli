@@ -1,7 +1,10 @@
 (** This module contains variables configuarations, to be set by pragmas or
     command line arguments, not to be changed for the duration of the program *)
 
-val check_directed_choice : unit -> bool
+val check_directed_choice_disabled : unit -> bool
+(** Whether to check if all branches of a choice start with a message to the same recipient. 
+    I.e. whether, during protocol validation, the program should attempt to project the global
+    type to local ones. *)
 
 val solver_show_queries : unit -> bool
 (** Whether to display queries to SMT solvers (with RefinementTypes pragma) *)

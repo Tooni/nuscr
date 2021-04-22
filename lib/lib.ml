@@ -46,7 +46,7 @@ let validate_protocols_exn (ast : scr_module) : unit =
   show ~f:(fun (g, _) -> Gtype.show g) g_types ;
   if Config.refinement_type_enabled () then
     List.iter ~f:(fun (g, _) -> Gtype.validate_refinements_exn g) g_types ;
-  if Config.check_directed_choice () then 
+  if not @@ Config.check_directed_choice_disabled () then 
     let l_types =
       List.map
         ~f:(fun (g, roles) ->

@@ -11,6 +11,7 @@ open Loc
 (* association list of pragmas *)
 
 type pragma =
+  | CheckDirectedChoiceDisabled
   | NestedProtocols
   | ShowPragmas
   | PrintUsage
@@ -21,6 +22,7 @@ type pragma =
 
 let pragma_of_string str : pragma =
   match str with
+  | "CheckDirectedChoiceDisabled" -> CheckDirectedChoiceDisabled
   | "ShowPragmas" -> ShowPragmas
   | "PrintUsage" -> PrintUsage
   | "NestedProtocols" -> NestedProtocols

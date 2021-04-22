@@ -16,7 +16,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Install z3 and others
+      - name: Install z3 & m4
         run: |
           sudo apt-get update
           sudo apt-get install z3 m4 -y

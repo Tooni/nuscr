@@ -159,7 +159,7 @@ let of_global_type gty =
           let curr = fresh () in
           starts := curr :: !starts
           (* check against selector is ok as all choices will start with messages from selector
-             for well-branchedness, verified later *)
+             for well-branchedness, verified in Routedefsm *)
           ; [(curr, curr, (selector, selector))]
         else 
           env.prevs 
@@ -209,7 +209,7 @@ let of_global_type gty =
     in
     let env = conv_gtype_aux init_chor_automata_conv_env gty in
     let g = env.g in
-    (* disjoint participants if 
+    (* sub-automata have disjoint participants iff
        the sum of the cardinalities of the sets == the cardinality of the union of the sets *)
     let rec get_role_set_from_start n = 
       let outgoing_edges = G.succ_e g n in

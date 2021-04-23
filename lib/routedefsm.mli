@@ -1,14 +1,22 @@
-(** Endpoint finite state machines (EFSM) *)
+(** Routed endpoint finite state machines *)
 
 open Names
 
+(** Annotation for refined actions *)
+type refinement_action_annot =
+  { silent_vars: (VariableName.t * Expr.payload_type) list
+        (** List of silent variables and their types *)
+  ; rec_expr_updates: Expr.t list
+        (** List of updates to recursion variables *) }
+[@@deriving ord, sexp_of]
+  
 (** Transitions in the EFSM *)
 type action =
-| SendA of RoleName.t * Gtype.message  (** Sending a [message] to [name] *)
-| RecvA of RoleName.t * Gtype.message (** Receiving a [message] from [name] *)
-| SendAWithNewRoles of RoleName.t * RoleName.t list * Gtype.message
-| RecvAWithNewRoles of RoleName.t * RoleName.t list * Gtype.message
-| Epsilon  (** Not used *)
+  | SendA of RoleName.t * Gtype.message * refinement_action_annot
+      (** Sending a [message] to [name] *)
+  | RecvA of RoleName.t * Gtype.message * refinement_action_annot
+      (** Receiving a [message] from [name] *)
+  | Epsilon  (** Not used *)
 
 (** Type of states in EFSM *)
 type state = int

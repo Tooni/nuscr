@@ -5,25 +5,48 @@ open Names
 open Graph
 open Err
 
+type refinement_action_annot =
+  { silent_vars: (VariableName.t * Expr.payload_type) list
+  ; rec_expr_updates: Expr.t list }
+[@@deriving ord, sexp_of]
+
+let show_refinement_actions_annot {silent_vars; rec_expr_updates} =
+  let silent_vars =
+    if List.is_empty silent_vars then ""
+    else
+      let svars_s =
+        String.concat ~sep:", "
+          (List.map
+             ~f:(fun (v, t) ->
+               sprintf "%s: %s" (VariableName.user v)
+                 (Expr.show_payload_type t) )
+             silent_vars )
+      in
+      "<" ^ svars_s ^ ">"
+  in
+  let rec_expr_updates =
+    if List.is_empty rec_expr_updates then ""
+    else
+      let expr_s =
+        String.concat ~sep:", " (List.map ~f:Expr.show rec_expr_updates)
+      in
+      "[" ^ expr_s ^ "]"
+  in
+  silent_vars ^ rec_expr_updates
+
 type action =
-  | SendA of RoleName.t * Gtype.message
-  | RecvA of RoleName.t * Gtype.message
-  | SendAWithNewRoles of RoleName.t * RoleName.t list * Gtype.message
-  | RecvAWithNewRoles of RoleName.t * RoleName.t list * Gtype.message
+  | SendA of RoleName.t * Gtype.message * refinement_action_annot
+  | RecvA of RoleName.t * Gtype.message * refinement_action_annot
   | Epsilon
 [@@deriving ord, sexp_of]
 
-let rec show_action =
-  let get_role_list roles = String.concat ~sep:"," (List.map ~f:RoleName.user roles) in
-  function
-  | SendA (r, msg) ->
-      sprintf "%s!%s" (RoleName.user r) (Gtype.show_message msg)
-  | RecvA (r, msg) ->
-      sprintf "%s?%s" (RoleName.user r) (Gtype.show_message msg)
-  | SendAWithNewRoles (r, rs, msg) ->
-    sprintf "%s!%s.%s" (RoleName.user r) (Gtype.show_message msg) (get_role_list rs)
-  | RecvAWithNewRoles (r, rs, msg) ->
-    sprintf "%s?%s.%s" (RoleName.user r) (Gtype.show_message msg) (get_role_list rs)
+let show_action = function
+  | (SendA (r, msg, rannot) | RecvA (r, msg, rannot)) as a ->
+      let symb =
+        match a with SendA _ -> "!" | RecvA _ -> "?" | _ -> assert false
+      in
+      sprintf "%s%s%s%s" (RoleName.user r) symb (Gtype.show_message msg)
+        (show_refinement_actions_annot rannot)
   | Epsilon -> "ε"
 
 module Label = struct
@@ -79,13 +102,21 @@ type efsm_conv_env =
   ; tyvars: (TypeVariableName.t * int) list
   ; states_to_merge: (int * int) list
   ; active_roles: (RoleName.t, RoleName.comparator_witness) Set.t
-  ; role_activations: (RoleName.t * RoleName.t * (message * int)) list }
+  ; role_activations: (RoleName.t * RoleName.t * (message * int)) list 
+  ; state_to_rec_var: (bool * Gtype.rec_var) list Map.M(Int).t
+  ; tv_to_rec_var: (bool * Gtype.rec_var) list Map.M(TypeVariableName).t
+  ; silent_var_buffer: (VariableName.t * Expr.payload_type) list 
+  ; svars: (VariableName.t, VariableName.comparator_witness) Set.t }
 let init_efsm_conv_env:efsm_conv_env = 
   { g= G.empty
   ; tyvars= []
   ; states_to_merge= []
   ; active_roles= Set.empty (module RoleName)
-  ; role_activations= [] }
+  ; role_activations= [] 
+  ; state_to_rec_var= Map.empty (module Int)
+  ; tv_to_rec_var= Map.empty (module TypeVariableName)
+  ; silent_var_buffer= []
+  ; svars= Set.empty (module VariableName) }
 
 let merge_state ~from_state ~to_state g =
   (* check for vertex ε-transitioning to itself: V --ε--> V *)
@@ -126,6 +157,34 @@ let of_global_type gty ~role ~server =
     count := n + 1 ;
     n
   in
+  let make_refinement_annotation env next_l =
+    if Config.refinement_type_enabled () then
+      let silent_vars = env.silent_var_buffer in
+      let rec_expr_updates =
+        match next_l with
+          | TVarG (tv, rec_exprs, _) ->
+            let check_expr silent_vars e =
+              let free_vars = Expr.free_var e in
+              let unknown_vars = Set.inter free_vars silent_vars in
+              if not @@ Set.is_empty unknown_vars then
+                uerr
+                  (UnknownVariableValue (role, Set.choose_exn unknown_vars))
+            in
+            let rec_expr_filter = Map.find_exn env.tv_to_rec_var tv in
+            let rec_exprs =
+              List.map2_exn
+                ~f:(fun (x, _) y -> if not x then Some y else None)
+                rec_expr_filter rec_exprs
+            in
+            let rec_exprs = List.filter_opt rec_exprs in
+            List.iter ~f:(check_expr env.svars) rec_exprs
+            ; rec_exprs
+          | _ ->
+            []
+      in
+      ({env with silent_var_buffer= []}, {silent_vars; rec_expr_updates})
+    else (env, {silent_vars= []; rec_expr_updates= []})
+  in
   let seen_choice = ref false in
   let mandatory_active_roles = ref (Set.add (Set.empty (module RoleName)) server) in
   let optional_active_roles = ref (Set.empty (module RoleName)) in
@@ -152,23 +211,17 @@ let of_global_type gty ~role ~server =
       ; let active_roles = Set.add active_roles recv_n in
       let active_roles = Set.add active_roles send_n in
       match role with
-      | _ when RoleName.equal role send_n ->
+      | _ when RoleName.equal role send_n || RoleName.equal role recv_n ->
         (*(Caml.Format.print_string ("send\n")) ;*)
         let curr = fresh () in
-        let a = SendA (recv_n, m) in
         let role_activations = role_activations @ [(send_n, recv_n, (m, curr))] in 
+        let env, rannot = make_refinement_annotation env l in
         let env, next = conv_gtype_aux {env with active_roles; role_activations} l in
-        let e = (curr, a, next) in
-        let g = env.g in
-        let g = G.add_vertex g curr in
-        let g = G.add_edge_e g e in
-        ({env with g}, curr)
-      | _ when RoleName.equal role recv_n ->
-        (*(Caml.Format.print_string ("recv\n")) ;*)
-        let curr = fresh () in
-        let a = RecvA (send_n, m) in
-        let role_activations = role_activations @ [(send_n, recv_n, (m, curr))] in 
-        let env, next = conv_gtype_aux {env with active_roles; role_activations} l in
+        let a = if RoleName.equal role send_n then
+          SendA (recv_n, m, rannot)
+        else (* if role equals recv_n *)
+          RecvA (send_n, m, rannot)
+        in
         let e = (curr, a, next) in
         let g = env.g in
         let g = G.add_vertex g curr in
@@ -177,12 +230,41 @@ let of_global_type gty ~role ~server =
       | _ ->
         (*(Caml.Format.print_string ("other\n")) ;*)
         let role_activations = role_activations @ [(send_n, recv_n, (m, !count))] in
-        conv_gtype_aux {env with active_roles; role_activations} l
+        let named_payloads =
+          List.rev_filter_map
+            ~f:(function
+              | PValue (Some var, t) -> Some (var, t) | _ -> None )
+            m.payload
+        in
+        if List.is_empty named_payloads || (not @@ Config.refinement_type_enabled ()) then 
+          conv_gtype_aux {env with active_roles; role_activations} l
+        else
+          let svars =
+            List.fold ~init:env.svars
+              ~f:(fun acc (var, _) -> Set.add acc var)
+              named_payloads
+          in
+          let silent_var_buffer = env.silent_var_buffer @ named_payloads in
+          conv_gtype_aux {env with active_roles; role_activations; silent_var_buffer; svars} l
     )
-    | MuG (tv, _, l) ->
+    | MuG (tv, rec_vars, l) ->
+      let rec_vars =
+        List.map
+          ~f:(fun ({rv_roles; _} as rec_var) ->
+            ( not @@ List.mem ~equal:RoleName.equal rv_roles role
+            , rec_var ) )
+          rec_vars
+      in
       let new_st = fresh () in
       let g = G.add_vertex g new_st in
-      let env = {env with tyvars= (tv, new_st) :: tyvars; g} in
+      let env =
+        { env with
+          tyvars= (tv, new_st) :: tyvars
+        ; g
+        ; state_to_rec_var= Map.set env.state_to_rec_var ~key:new_st ~data:rec_vars
+        ; tv_to_rec_var = Map.add_exn env.tv_to_rec_var ~key:tv ~data:rec_vars
+        }
+      in
       let env, curr = conv_gtype_aux env l in
       let g = env.g in
       let g = G.add_edge_e g (new_st, Epsilon, curr) in
@@ -290,8 +372,9 @@ let of_global_type gty ~role ~server =
   let optional_active_roles_list = Set.to_list !optional_active_roles in
   let mandatory_active_roles_list = Set.to_list !mandatory_active_roles in
   let g = env.g in
-  if not @@ List.is_empty env.states_to_merge then
-    let rec aux (start, g) = function
+  let state_to_rec_var = env.state_to_rec_var in
+  if not @@ List.is_empty env.states_to_merge then (* TODO: add rec_var unimpl thing *)
+    let rec aux (start, g, state_to_rec_var) = function
       | [] -> ((start, g), (mandatory_active_roles_list, optional_active_roles_list))
       | (s1, s2) :: rest ->
           let to_state = Int.min s1 s2 in
@@ -307,7 +390,20 @@ let of_global_type gty ~role ~server =
                 (x, y))
               rest
           in
-          aux (start, g) rest
+          let state_to_rec_var =
+            match Map.find state_to_rec_var from_state with
+            | None -> state_to_rec_var
+            | Some rv ->
+                Map.update
+                  ~f:(function
+                    | None -> rv
+                    | Some _ -> rv 
+                     (* todo: figure out what this is *)
+                        (*Err.unimpl
+                          "Multiple recursions with variables in choices" *))
+                  state_to_rec_var to_state
+          in
+          aux (start, g, state_to_rec_var) rest
     in
-    aux (start, g) env.states_to_merge
+    aux (start, g, state_to_rec_var) env.states_to_merge
   else ((start, g), (mandatory_active_roles_list, optional_active_roles_list))

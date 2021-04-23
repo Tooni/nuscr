@@ -82,14 +82,18 @@ let validate_config () =
 let load_from_pragmas pragmas =
   let process_global_pragma (k, v) =
     match (k, v) with
-    | Syntax.CheckDirectedChoiceDisabled, _ -> set_check_directed_choice_disabled true
-    | Syntax.NestedProtocols, _ -> set_nested_protocol true
-    | Syntax.RefinementTypes, _ -> set_refinement_type true
+    | Syntax.CheckDirectedChoiceDisabled, _ ->
+        set_check_directed_choice_disabled true
+    | Syntax.NestedProtocols, _ ->
+        set_nested_protocol true
+    | Syntax.RefinementTypes, _ ->
+        set_refinement_type true
     | Syntax.SenderValidateRefinements, _ ->
         set_sender_validate_refinements true
     | Syntax.ReceiverValidateRefinements, _ ->
         set_receiver_validate_refinements true
-    | Syntax.ShowPragmas, _ | Syntax.PrintUsage, _ -> ()
+    | Syntax.ShowPragmas, _ | Syntax.PrintUsage, _ ->
+        ()
   in
   List.iter ~f:process_global_pragma pragmas ;
   validate_config ()

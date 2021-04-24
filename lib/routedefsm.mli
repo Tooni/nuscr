@@ -2,6 +2,10 @@
 
 open Names
 
+type action_ref =
+  | RefA of string
+  | EpsilonRef
+
 (** Annotation for refined actions *)
 type refinement_action_annot =
   { silent_vars: (VariableName.t * Expr.payload_type) list
@@ -25,8 +29,8 @@ type state = int
 module G :
   Graph.Sig.P
     with type V.t = state
-     and type E.label = action
-     and type E.t = state * action * state
+     and type E.label = action_ref
+     and type E.t = state * action_ref * state
 
 (** Type of the EFSM *)
 type t = G.t

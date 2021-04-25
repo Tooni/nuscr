@@ -26,11 +26,11 @@ let silent_vars_and_rec_expr_updates_str {silent_vars; rec_expr_updates} =
     String.concat ~sep:",\n"
       (List.map
           ~f:(fun (v, t) ->
-            sprintf "\"%s\": \"%s\"" (VariableName.user v) (fst @@ show_payload_type t) )
+            sprintf {|"%s": "%s"|} (VariableName.user v) (fst @@ show_payload_type t) )
           silent_vars)
   in
   let rec_expr_updates =
-    String.concat ~sep:", " (List.map ~f:Expr.show rec_expr_updates)
+    String.concat ~sep:{|","|} (List.map ~f:Expr.show rec_expr_updates)
   in
   silent_vars, rec_expr_updates
 
@@ -204,28 +204,40 @@ let of_global_type gty ~role ~server =
   let make_refinement_annotation env next_l =
     if Config.refinement_type_enabled () then
       let silent_vars = env.silent_var_buffer in
-      let rec_expr_updates =
-        match next_l with
-          | TVarG (tv, rec_exprs, _) ->
-            let check_expr silent_vars e =
-              let free_vars = Expr.free_var e in
-              let unknown_vars = Set.inter free_vars silent_vars in
-              if not @@ Set.is_empty unknown_vars then
-                uerr
-                  (UnknownVariableValue (role, Set.choose_exn unknown_vars))
-            in
-            let rec_expr_filter = Map.find_exn env.tv_to_rec_var tv in
-            let rec_exprs =
-              List.map2_exn
-                ~f:(fun (x, _) y -> if not x then Some y else None)
-                rec_expr_filter rec_exprs
-            in
-            let rec_exprs = List.filter_opt rec_exprs in
-            List.iter ~f:(check_expr env.svars) rec_exprs
-            ; rec_exprs
-          | _ ->
-            []
+      let rec aux l = (match l with
+      | ChoiceG (selector, ls) ->
+        let branch_updates = List.concat (List.map ~f:aux ls) in
+        let branch_update_strs = List.map ~f:Expr.show branch_updates in
+        let dedupped_branch_updates = Set.to_list (Set.of_list (module String) branch_update_strs) in
+        if List.length dedupped_branch_updates > 1 then
+          uerr @@ RecExpressionUpdatesNonUniform selector
+        ; branch_updates
+      | TVarG (tv, rec_exprs, _) ->
+        let check_expr silent_vars e =
+          let free_vars = Expr.free_var e in
+          let unknown_vars = Set.inter free_vars silent_vars in
+          if not @@ Set.is_empty unknown_vars then
+            uerr
+              (UnknownVariableValue (role, Set.choose_exn unknown_vars))
+        in
+        let rec_expr_filter = Map.find_exn env.tv_to_rec_var tv in
+        let rec_exprs =
+          List.map2_exn
+            ~f:(fun (x, _) y -> if not x then Some y else None)
+            rec_expr_filter rec_exprs
+        in
+        let rec_exprs = List.filter_opt rec_exprs in
+        List.iter ~f:(check_expr env.svars) rec_exprs
+        ; rec_exprs
+      | MessageG (_, s, r, l') ->
+        if RoleName.equal role s || RoleName.equal role r then
+          []
+        else
+          aux l'
+      | _ ->
+        [])
       in
+      let rec_expr_updates = aux next_l in
       ({env with silent_var_buffer= []}, {silent_vars; rec_expr_updates})
     else (env, {silent_vars= []; rec_expr_updates= []})
   in

@@ -3,6 +3,7 @@ open Loc
 open Names
 
 type user_error =
+  | RecExpressionUpdatesNonUniform of RoleName.t
   | WellBranchednessError of RoleName.t * RoleName.t
   | BranchErrorPrevious of RoleName.t * RoleName.t
   | BranchErrorNew of RoleName.t * (RoleName.t list)
@@ -43,6 +44,9 @@ exception UserError of user_error
 [@@deriving sexp_of]
 
 let show_user_error = function
+  | RecExpressionUpdatesNonUniform (rc) ->
+      "When branches of a choice update a recursion expression. Each branch must update it in the same way. "
+      ^ "Failed for choice-maker " ^ RoleName.user rc
   | WellBranchednessError (rc, r) ->
       "In a choice, as per Def. 4.6 (3) of the Choreography Automata paper, for each possible pair of branches "
       ^ "of a projected role B (apart from the choice-maker), the first pair of different labels must be of the form "

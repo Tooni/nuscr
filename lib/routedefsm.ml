@@ -12,14 +12,31 @@ type refinement_action_annot =
 
 let encase = sprintf "\"%s\""
 
+let rec refinement_str = function
+  | Expr.Var v -> encase @@ VariableName.user v
+  | Expr.Int i -> encase @@ Int.to_string i
+  | Expr.Bool b -> encase @@ Bool.to_string b
+  | Expr.String s -> encase ("\\\"" ^ s ^ "\\\"")
+  | Expr.Binop (b, e1, e2) ->
+      sprintf 
+      {|{"binop": "%s",
+"e1": %s,
+"e2": %s}|} 
+      (Syntax.show_binop b) (refinement_str e1) (refinement_str e2)
+  | Expr.Unop (u, e) -> sprintf 
+      {|{"unop": "%s",
+"e": %s}|}
+      (Syntax.show_unop u) (refinement_str e)
+
 let rec show_payload_type =
+  let no_refinement = "\"\"" in
   function
   | Expr.PTAbstract n -> (PayloadTypeName.user n, "")
-  | Expr.PTRefined (_, ty', e) -> (fst @@ show_payload_type ty', String.escaped @@ Expr.show e)
-  | Expr.PTInt -> ("number", "")
-  | Expr.PTBool -> ("boolean", "")
-  | Expr.PTString -> ("string", "")
-  | Expr.PTUnit -> ("null", "")
+  | Expr.PTRefined (_, ty', e) -> (fst @@ show_payload_type ty', refinement_str e)
+  | Expr.PTInt -> ("number", no_refinement)
+  | Expr.PTBool -> ("boolean", no_refinement)
+  | Expr.PTString -> ("string", no_refinement)
+  | Expr.PTUnit -> ("null", no_refinement)
 
 let silent_vars_and_rec_expr_updates_str {silent_vars; rec_expr_updates} =
   let silent_vars =
@@ -38,7 +55,7 @@ let payloads_str pl =
   let name, sort, refinement = (match pl with 
     | PValue (n, ty) ->
       let sort, refinement = show_payload_type ty in
-      let sort, refinement = encase sort, encase refinement in
+      let sort, refinement = encase sort, refinement in
       let name =  (match n with 
         | Some n' -> encase @@ VariableName.user n'
         | None -> encase "")

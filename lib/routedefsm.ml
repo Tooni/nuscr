@@ -157,6 +157,9 @@ let show g =
   Caml.Format.pp_print_flush formatter () ;
   Buffer.contents buffer
 
+
+type rec_var_info = (bool * Gtype.rec_var) list Map.M(Int).t
+
 type efsm_conv_env =
   { g: G.t
   ; tyvars: (TypeVariableName.t * int) list
@@ -451,7 +454,7 @@ let of_global_type gty ~role ~server =
   let g = env.g in
   let state_to_rec_var = env.state_to_rec_var in
   if not @@ List.is_empty env.states_to_merge then (* TODO: add rec_var unimpl thing *)
-    let rec aux (start, g, state_to_rec_var) = function
+    let rec aux (start, g, (state_to_rec_var:rec_var_info)) = function
       | [] -> ((start, g), (mandatory_active_roles_list, optional_active_roles_list))
       | (s1, s2) :: rest ->
           let to_state = Int.min s1 s2 in
@@ -468,16 +471,16 @@ let of_global_type gty ~role ~server =
               rest
           in
           let state_to_rec_var =
+            if from_state = to_state then state_to_rec_var else
             match Map.find state_to_rec_var from_state with
             | None -> state_to_rec_var
             | Some rv ->
                 Map.update
                   ~f:(function
-                    | None -> rv
-                    | Some _ -> rv 
-                     (* todo: figure out what this is *)
-                        (*Err.unimpl
-                          "Multiple recursions with variables in choices" *))
+                    | Some _ ->
+                      (Err.unimpl
+                        "Multiple recursions with variables in choices")
+                    | None -> rv)
                   state_to_rec_var to_state
           in
           aux (start, g, state_to_rec_var) rest

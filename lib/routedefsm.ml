@@ -16,7 +16,7 @@ let rec refinement_str = function
   | Expr.Var v -> encase @@ VariableName.user v
   | Expr.Int i -> encase @@ Int.to_string i
   | Expr.Bool b -> encase @@ Bool.to_string b
-  | Expr.String s -> encase ("\\\"" ^ s ^ "\\\"")
+  | Expr.String s -> encase @@ "'" ^ s ^ "'"
   | Expr.Binop (b, e1, e2) ->
       sprintf 
       {|{"binop": "%s",
@@ -47,7 +47,7 @@ let silent_vars_and_rec_expr_updates_str {silent_vars; rec_expr_updates} =
           silent_vars)
   in
   let rec_expr_updates =
-    String.concat ~sep:{|","|} (List.map ~f:Expr.show rec_expr_updates)
+    String.concat ~sep:{|,|} (List.map ~f:refinement_str rec_expr_updates)
   in
   silent_vars, rec_expr_updates
 
@@ -107,7 +107,7 @@ let show_action =
       (encase @@ LabelName.user msg.label)
       (String.concat ~sep:",\n" (List.map ~f:payloads_str msg.payload))
       (svars)
-      (if String.equal rec_expr_updates "" then "" else encase rec_expr_updates)
+      (rec_expr_updates)
 
 module Label = struct
   module M = struct

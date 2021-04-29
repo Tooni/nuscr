@@ -35,7 +35,7 @@ module G :
 (** Type of the EFSM *)
 type t = G.t
 
-val of_global_type : Gtype.t -> role:RoleName.t -> server:RoleName.t -> (state * t) * (RoleName.t list * RoleName.t list)
+val of_global_type : Gtype.t -> role:RoleName.t -> server:RoleName.t -> (state * t) * (RoleName.t list * RoleName.t list) * string
 
 val show : t -> string
 (** Produce a DOT representation of EFSM, which can be visualised by Graphviz *)

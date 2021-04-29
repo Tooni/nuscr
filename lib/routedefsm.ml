@@ -29,7 +29,7 @@ let rec refinement_str = function
       (Syntax.show_unop u) (refinement_str e)
 
 let rec show_payload_type =
-  let no_refinement = "\"\"" in
+  let no_refinement = {|""|} in
   function
   | Expr.PTAbstract n -> (PayloadTypeName.user n, "")
   | Expr.PTRefined (_, ty', e) -> (fst @@ show_payload_type ty', refinement_str e)
@@ -61,7 +61,7 @@ let payloads_str pl =
         | None -> encase "")
       in 
       (name, sort, refinement)
-    | PDelegate _ -> Err.unimpl "delegation for routed fsm gen")
+    | PDelegate _ -> Err.unimpl "delegation for routed FSM generation")
   in
   sprintf 
     {|{
@@ -90,13 +90,13 @@ let show_action =
   | Epsilon -> "ε"
   | (SendA (r, msg, annot_as) | RecvA (r, msg, annot_as)) as a ->
     let action =
-      match a with SendA _ -> "send" | RecvA _ -> "recv" | _ -> assert false
+      match a with SendA _ -> "!" | RecvA _ -> "?" | _ -> assert false
     in
     let svars, rec_expr_updates = silent_vars_and_rec_expr_updates_str annot_as in
     sprintf 
       {|{
-"action": %s,
-"target": %s,
+"op": %s,
+"role": %s,
 "label": %s,
 "payloads": [%s],
 "silents": {%s},
@@ -449,13 +449,13 @@ let of_global_type gty ~role ~server =
   let env, start = conv_gtype_aux {init_env with active_roles=init_active_roles} gty in
   let optional_active_roles_list = Set.to_list !optional_active_roles in
   let mandatory_active_roles_list = Set.to_list !mandatory_active_roles in
-  json := "{" ^ !json ^ "\n}\n\n" ;
-  (Caml.Format.print_string (!json)) ;
-  let g = env.g in
+  json := String.drop_suffix !json 1 (* drop trailing comma *)
+  ; json := "{" ^ !json ^ "\n}\n\n"
+  ; let g = env.g in
   let state_to_rec_var = env.state_to_rec_var in
   if not @@ List.is_empty env.states_to_merge then (* TODO: add rec_var unimpl thing *)
     let rec aux (start, g, (state_to_rec_var:rec_var_info)) = function
-      | [] -> ((start, g), (mandatory_active_roles_list, optional_active_roles_list))
+      | [] -> ((start, g), (mandatory_active_roles_list, optional_active_roles_list), !json)
       | (s1, s2) :: rest ->
           let to_state = Int.min s1 s2 in
           let from_state = Int.max s1 s2 in
@@ -486,4 +486,4 @@ let of_global_type gty ~role ~server =
           aux (start, g, state_to_rec_var) rest
     in
     aux (start, g, state_to_rec_var) env.states_to_merge
-  else ((start, g), (mandatory_active_roles_list, optional_active_roles_list))
+  else ((start, g), (mandatory_active_roles_list, optional_active_roles_list), !json)

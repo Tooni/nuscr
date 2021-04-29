@@ -227,11 +227,10 @@ let of_global_type gty ~role ~server =
       let rec aux l = (match l with
       | ChoiceG (selector, ls) ->
         let branch_updates = List.concat (List.map ~f:aux ls) in
-        let branch_update_strs = List.map ~f:Expr.show branch_updates in
-        let dedupped_branch_updates = Set.to_list (Set.of_list (module String) branch_update_strs) in
+        let dedupped_branch_updates = List.dedup_and_sort ~compare:Expr.compare branch_updates in
         if List.length dedupped_branch_updates > 1 then
           uerr @@ RecExpressionUpdatesNonUniform selector
-        ; branch_updates
+        ; dedupped_branch_updates
       | TVarG (tv, rec_exprs, _) ->
         let check_expr silent_vars e =
           let free_vars = Expr.free_var e in

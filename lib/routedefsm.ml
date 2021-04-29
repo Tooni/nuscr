@@ -51,25 +51,26 @@ let silent_vars_and_rec_expr_updates_str {silent_vars; rec_expr_updates} =
   in
   silent_vars, rec_expr_updates
 
-let payloads_str pl = 
+let payloads_str pl_num pl = 
   let name, sort, refinement = (match pl with 
     | PValue (n, ty) ->
       let sort, refinement = show_payload_type ty in
-      let sort, refinement = encase sort, refinement in
+      let sort = encase sort in
+      let refinement = if String.equal refinement "" then encase refinement else refinement in
       let name =  (match n with 
         | Some n' -> encase @@ VariableName.user n'
-        | None -> encase "")
-      in 
+        | None -> encase @@ "payload_" ^ Int.to_string pl_num)
+      in
       (name, sort, refinement)
     | PDelegate _ -> Err.unimpl "delegation for routed FSM generation")
   in
-  sprintf 
+  (pl_num + 1, sprintf 
     {|{
 "name": %s,
 "sort": %s,
 "refinement": %s
 }|} 
-    name sort refinement 
+    name sort refinement)
 
 type action_ref =
   | RefA of string
@@ -105,7 +106,7 @@ let show_action =
       (encase action) 
       (encase @@ RoleName.user r)
       (encase @@ LabelName.user msg.label)
-      (String.concat ~sep:",\n" (List.map ~f:payloads_str msg.payload))
+      (String.concat ~sep:",\n" (List.folding_map ~init:1 ~f:payloads_str msg.payload))
       (svars)
       (rec_expr_updates)
 

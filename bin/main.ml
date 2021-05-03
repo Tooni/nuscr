@@ -66,12 +66,8 @@ let main file enumerate verbose go_path out_dir project fsm routed_fsm gencode_o
     let () =
       gen_output_for_routed_fsm ast
         (fun ast protocol role server ->
-          let get_role_list roles = String.concat ~sep:"," (List.map ~f:RoleName.user roles) in
-          let ((_, g), (mandatory, optional), json) = Lib.generate_routed_fsm ast ~protocol ~role ~server in
-          Routedefsm.show g 
-          ^ "\n\nmandatory: " ^ get_role_list mandatory 
-          ^ "\noptional: " ^ get_role_list optional
-          ^ "\njson:\n" ^ json
+          let ((_, g), json) = Lib.generate_routed_fsm ast ~protocol ~role ~server in
+          Routedefsm.show g ^ "\njson:" ^ json
           )
           routed_fsm
     in

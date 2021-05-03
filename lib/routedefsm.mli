@@ -10,7 +10,7 @@ type action_ref =
 type refinement_action_annot =
   { silent_vars: (VariableName.t * Expr.payload_type) list
         (** List of silent variables and their types *)
-  ; rec_expr_updates: Expr.t list
+  ; rec_expr_updates: (string * Expr.t) list
         (** List of updates to recursion variables *) }
 [@@deriving ord, sexp_of]
   
@@ -35,7 +35,7 @@ module G :
 (** Type of the EFSM *)
 type t = G.t
 
-val of_global_type : Gtype.t -> role:RoleName.t -> server:RoleName.t -> (state * t) * (RoleName.t list * RoleName.t list) * string
+val of_global_type : Gtype.t -> role:RoleName.t -> server:RoleName.t -> (state * t) * string
 
 val show : t -> string
 (** Produce a DOT representation of EFSM, which can be visualised by Graphviz *)

@@ -7,7 +7,7 @@ open Err
 
 type refinement_action_annot =
   { silent_vars: (VariableName.t * Expr.payload_type) list
-  ; rec_expr_updates: Expr.t list }
+  ; rec_expr_updates: (string * Expr.t) list }
 [@@deriving ord, sexp_of]
 
 let encase = sprintf "\"%s\""
@@ -47,18 +47,19 @@ let silent_vars_and_rec_expr_updates_str {silent_vars; rec_expr_updates} =
           silent_vars)
   in
   let rec_expr_updates =
-    String.concat ~sep:{|,|} (List.map ~f:refinement_str rec_expr_updates)
+    String.concat ~sep:{|,|} (List.map ~f:(fun (n, r) -> 
+      encase n ^ ": " ^ refinement_str r) rec_expr_updates)
   in
   silent_vars, rec_expr_updates
 
-let payloads_str pl_num pl = 
+let payloads_str pl_num pl =
   let name, sort, refinement = (match pl with 
     | PValue (n, ty) ->
       let sort, refinement = show_payload_type ty in
       let sort = encase sort in
       let refinement = if String.equal refinement "" then encase refinement else refinement in
       let name =  (match n with 
-        | Some n' -> encase @@ VariableName.user n'
+        | Some n' -> encase @@ VariableName.user n' (* todo: error if name starting with payload_, to guarantee pl names distinct *)
         | None -> encase @@ "payload_" ^ Int.to_string pl_num)
       in
       (name, sort, refinement)
@@ -101,7 +102,7 @@ let show_action =
 "label": %s,
 "payloads": [%s],
 "silents": {%s},
-"rec_exprs": [%s]
+"rec_expr_updates": {%s}
 }|} 
       (encase action) 
       (encase @@ RoleName.user r)
@@ -213,9 +214,10 @@ let merge_state ~from_state ~to_state g =
     let g = G.remove_vertex g from_state in
     g
 
+(*let get_all_refinements.......*)
+
 (*todo: check that ~role is actually mentioned in protocol definition*)
 let of_global_type gty ~role ~server =
-  let json = ref "" in
   let count = ref 0 in
   let fresh () =
     let n = !count in
@@ -225,13 +227,13 @@ let of_global_type gty ~role ~server =
   let make_refinement_annotation env next_l =
     if Config.refinement_type_enabled () then
       let silent_vars = env.silent_var_buffer in
-      let rec aux l = (match l with
+      let rec aux:(Gtype.t -> (string * Expr.t) list) = (function
       | ChoiceG (selector, ls) ->
-        let branch_updates = List.concat (List.map ~f:aux ls) in
+        let branch_updates = List.map ~f:snd @@ List.concat @@ List.map ~f:aux ls in
         let dedupped_branch_updates = List.dedup_and_sort ~compare:Expr.compare branch_updates in
         if List.length dedupped_branch_updates > 1 then
           uerr @@ RecExpressionUpdatesNonUniform selector
-        ; dedupped_branch_updates
+        ; aux @@ List.hd_exn ls
       | TVarG (tv, rec_exprs, _) ->
         let check_expr silent_vars e =
           let free_vars = Expr.free_var e in
@@ -246,9 +248,15 @@ let of_global_type gty ~role ~server =
             ~f:(fun (x, _) y -> if not x then Some y else None)
             rec_expr_filter rec_exprs
         in
+        let rec_expr_name = if not @@ List.is_empty rec_expr_filter then
+            VariableName.user (snd @@ List.hd_exn rec_expr_filter).rv_name 
+          else
+            ""
+        in
         let rec_exprs = List.filter_opt rec_exprs in
         List.iter ~f:(check_expr env.svars) rec_exprs
-        ; rec_exprs
+        ; let rec_exprs = List.map ~f:(fun r -> (rec_expr_name, r)) rec_exprs in
+        rec_exprs
       | MessageG (_, s, r, l') ->
         if RoleName.equal role s || RoleName.equal role r then
           []
@@ -264,10 +272,12 @@ let of_global_type gty ~role ~server =
   let seen_choice = ref false in
   let mandatory_active_roles = ref (Set.add (Set.empty (module RoleName)) server) in
   let optional_active_roles = ref (Set.empty (module RoleName)) in
+  let edge_json = ref "" in
+  let rec_expr_inits = ref [] in
   let terminal = ref ~-1 in
   let rec conv_gtype_aux env=
     let {g; tyvars; active_roles; role_activations; _} = env in
-    let terminate () = 
+    let terminate () =
       if !terminal = ~-1 then
         let curr = fresh () in
         terminal := curr ;
@@ -299,7 +309,7 @@ let of_global_type gty ~role ~server =
           RecvA (send_n, m, rannot)
         in
         let ref_a = RefA (Int.to_string curr ^ Int.to_string next) in
-        json := sprintf "%s\n\"%s\": %s," (!json) (show_action_ref ref_a) (show_action a) ;
+        edge_json := sprintf "%s\n\"%s\": %s," (!edge_json) (show_action_ref ref_a) (show_action a) ;
         let e = (curr, ref_a, next) in
         let g = env.g in
         let g = G.add_vertex g curr in
@@ -343,7 +353,13 @@ let of_global_type gty ~role ~server =
         ; tv_to_rec_var = Map.add_exn env.tv_to_rec_var ~key:tv ~data:rec_vars
         }
       in
-      let env, curr = conv_gtype_aux env l in
+      if not @@ List.is_empty rec_vars then
+        (let rec_var = snd @@ List.hd_exn rec_vars in
+        let name = rec_var.rv_name in
+        let init = rec_var.rv_init_expr in
+        let ty = rec_var.rv_ty in
+        rec_expr_inits := (name, init, ty) :: !rec_expr_inits)
+      ; let env, curr = conv_gtype_aux env l in
       let g = env.g in
       let g = G.add_edge_e g (new_st, EpsilonRef, curr) in
       let states_to_merge = (new_st, curr) :: env.states_to_merge in
@@ -449,13 +465,32 @@ let of_global_type gty ~role ~server =
   let env, start = conv_gtype_aux {init_env with active_roles=init_active_roles} gty in
   let optional_active_roles_list = Set.to_list !optional_active_roles in
   let mandatory_active_roles_list = Set.to_list !mandatory_active_roles in
-  json := String.drop_suffix !json 1 (* drop trailing comma *)
-  ; json := "{" ^ !json ^ "\n}\n\n"
-  ; let g = env.g in
+  let create_role_json role_type role_list = sprintf {|"%s": [%s]|} 
+    role_type
+    (String.concat ~sep:{|,|} (List.map ~f:(fun r -> encase @@ RoleName.user r) role_list))
+  in
+  let optional_json = create_role_json "optional" optional_active_roles_list in
+  let mandatory_json = create_role_json "mandatory" mandatory_active_roles_list in
+  let rec_expr_init_json = 
+    "\"rec_exprs\": {\n" ^ 
+      String.concat ~sep:"," 
+        (List.map !rec_expr_inits
+          ~f:(fun (n, init, ty) ->
+            let sort, refinement = show_payload_type ty in
+            let sort = encase sort in
+            let refinement = if String.equal refinement "" then encase refinement else refinement in
+            let init = refinement_str init in
+            sprintf {|"%s": {"sort": %s, "refinement": %s, "init": %s}|} (VariableName.user n) sort refinement init))
+    ^ "\n}"
+  in
+  edge_json := String.drop_suffix !edge_json 1 (* drop trailing comma *)
+  ; edge_json := "\"edges\": {" ^ !edge_json ^ "\n}"
+  ; let json = sprintf "\n\n{\n%s,\n%s,\n%s,\n%s\n}" mandatory_json optional_json rec_expr_init_json !edge_json in
+  let g = env.g in
   let state_to_rec_var = env.state_to_rec_var in
   if not @@ List.is_empty env.states_to_merge then (* TODO: add rec_var unimpl thing *)
     let rec aux (start, g, (state_to_rec_var:rec_var_info)) = function
-      | [] -> ((start, g), (mandatory_active_roles_list, optional_active_roles_list), !json)
+      | [] -> ((start, g), json)
       | (s1, s2) :: rest ->
           let to_state = Int.min s1 s2 in
           let from_state = Int.max s1 s2 in
@@ -486,4 +521,4 @@ let of_global_type gty ~role ~server =
           aux (start, g, state_to_rec_var) rest
     in
     aux (start, g, state_to_rec_var) env.states_to_merge
-  else ((start, g), (mandatory_active_roles_list, optional_active_roles_list), !json)
+  else ((start, g), json)

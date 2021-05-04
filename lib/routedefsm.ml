@@ -277,7 +277,6 @@ let of_global_type gty ~role ~server =
   let optional_active_roles = ref (Set.empty (module RoleName)) in
   let edge_json = ref "" in
   let rec_expr_inits = ref [] in
-  let all_refinements = ref [] in
   let terminal = ref ~-1 in
   let rec conv_gtype_aux env=
     let {g; tyvars; active_roles; role_activations; _} = env in
@@ -300,24 +299,7 @@ let of_global_type gty ~role ~server =
       )
       ; let active_roles = Set.add active_roles recv_n in
       let active_roles = Set.add active_roles send_n in
-      let refinements = List.map 
-        ~f:(fun pl -> 
-          let (_, _, refinement) = name_sort_refinement pl 1 in
-          if String.equal refinement "\"\"" then
-            None
-          else
-            Some refinement)
-        m.payload
-      in
-      let refinements = List.filter_opt refinements in
-      if not @@ List.is_empty refinements then
-        (let refinements = String.concat ~sep:"," refinements in
-        all_refinements :=
-          sprintf "\"%s>%s>%s\": [%s]" 
-            (RoleName.user send_n) (LabelName.user m.label) 
-            (RoleName.user recv_n) refinements 
-          :: !all_refinements)
-      ; match role with
+      match role with
       | _ when RoleName.equal role send_n || RoleName.equal role recv_n ->
         (*(Caml.Format.print_string ("send\n")) ;*)
         let curr = fresh () in
@@ -492,7 +474,6 @@ let of_global_type gty ~role ~server =
   in
   let optional_json = create_role_json "optional" optional_active_roles_list in
   let mandatory_json = create_role_json "mandatory" mandatory_active_roles_list in
-  let refinement_json = "\"refinements\": {" ^ String.concat ~sep:",\n" !all_refinements ^ "}" in
   let rec_expr_init_json = 
     "\"rec_exprs\": {\n" ^ 
       String.concat ~sep:"," 
@@ -507,7 +488,7 @@ let of_global_type gty ~role ~server =
   in
   edge_json := String.drop_suffix !edge_json 1 (* drop trailing comma *)
   ; edge_json := "\"edges\": {" ^ !edge_json ^ "\n}"
-  ; let json = sprintf "\n\n{\n%s,\n%s,\n%s,\n%s,\n%s\n}" mandatory_json optional_json refinement_json rec_expr_init_json !edge_json in
+  ; let json = sprintf "\n\n{\n%s,\n%s,\n%s,\n%s\n}" mandatory_json optional_json rec_expr_init_json !edge_json in
   let g = env.g in
   let state_to_rec_var = env.state_to_rec_var in
   if not @@ List.is_empty env.states_to_merge then (* TODO: add rec_var unimpl thing *)

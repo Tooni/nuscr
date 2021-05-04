@@ -245,7 +245,8 @@ let of_global_type gty =
       uerr ChorAutomataNotWellSequencedDueToNonDisjointParticipants
     ; if not @@ List.is_empty env.states_to_merge then
       let rec aux (start, g) = function
-        | [] -> (*(Caml.Format.print_string (show g ^ "\n\n") ;*) g
+        (*| [] -> (Caml.Format.print_string (show g ^ "\n\n") ; g)*)
+        | [] -> g
         | (s1, s2) :: rest ->
             let to_state = Int.min s1 s2 in
             let from_state = Int.max s1 s2 in

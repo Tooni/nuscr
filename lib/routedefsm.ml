@@ -496,48 +496,50 @@ let of_global_type gty ~role ~server =
   ; edge_json := "\"edges\": {" ^ !edge_json ^ "\n}"
   ; let g = env.g in
   let state_to_rec_var = env.state_to_rec_var in
-  if not @@ List.is_empty env.states_to_merge then (* TODO: add rec_var unimpl thing *)
-    let rec aux (start, g, (state_to_rec_var:rec_var_info)) = function
-      | [] -> (start, g)
-      | (s1, s2) :: rest ->
-          let to_state = Int.min s1 s2 in
-          let from_state = Int.max s1 s2 in
-          let subst x = if x = from_state then to_state else x in
-          let g = merge_state ~from_state ~to_state g in
-          let start = subst start in
-          let rest =
-            List.map
-              ~f:(fun (x, y) ->
-                let x = subst x in
-                let y = subst y in
-                (x, y))
-              rest
-          in
-          let state_to_rec_var =
-            if from_state = to_state then state_to_rec_var else
-            match Map.find state_to_rec_var from_state with
-            | None -> state_to_rec_var
-            | Some rv ->
-                Map.update
-                  ~f:(function
-                    | Some _ ->
-                      (Err.unimpl
-                        "Multiple recursions with variables in choices")
-                    | None -> rv)
-                  state_to_rec_var to_state
-          in
-          aux (start, g, state_to_rec_var) rest
-    in
-    let (start, g) = aux (start, g, state_to_rec_var) env.states_to_merge in
-    let edge_to_from_state_json = G.fold_edges_e
+  let (start, g) = 
+    if not @@ List.is_empty env.states_to_merge then
+      (let rec aux (start, g, (state_to_rec_var:rec_var_info)) = function
+        | [] -> (start, g)
+        | (s1, s2) :: rest ->
+            let to_state = Int.min s1 s2 in
+            let from_state = Int.max s1 s2 in
+            let subst x = if x = from_state then to_state else x in
+            let g = merge_state ~from_state ~to_state g in
+            let start = subst start in
+            let rest =
+              List.map
+                ~f:(fun (x, y) ->
+                  let x = subst x in
+                  let y = subst y in
+                  (x, y))
+                rest
+            in
+            let state_to_rec_var =
+              if from_state = to_state then state_to_rec_var else
+              match Map.find state_to_rec_var from_state with
+              | None -> state_to_rec_var
+              | Some rv ->
+                  Map.update
+                    ~f:(function
+                      | Some _ ->
+                        (Err.unimpl
+                          "Multiple recursions with variables in choices")
+                      | None -> rv)
+                    state_to_rec_var to_state
+            in
+            aux (start, g, state_to_rec_var) rest
+      in
+      aux (start, g, state_to_rec_var) env.states_to_merge)
+    else 
+      (start, g)
+  in
+  let edge_to_from_state_json = G.fold_edges_e
       (fun (from, label, _) s -> 
         s ^ sprintf {|"%s": "%s",|} (show_action_ref label) (Int.to_string from))
       g "{"
     in
-    let edge_to_from_state_json = String.drop_suffix edge_to_from_state_json 1 ^ "}" in (*trailing comma*)
-    let edge_to_from_state_json = sprintf {|"froms": %s|} edge_to_from_state_json in
-    let json = sprintf "\n\n{\n%s,\n%s,\n%s,\n%s, \n%s\n}" mandatory_json optional_json edge_to_from_state_json rec_expr_init_json !edge_json in
-    ((start, g), json)
-  else 
-    let json = sprintf "\n\n{\n%s,\n%s,\n%s, \n%s\n}" mandatory_json optional_json rec_expr_init_json !edge_json in
-    ((start, g), json)
+  let edge_to_from_state_json = String.drop_suffix edge_to_from_state_json 1 ^ "}" in (*trailing comma*)
+  let edge_to_from_state_json = sprintf {|"froms": %s|} edge_to_from_state_json
+  in
+  let json = sprintf "\n\n{\n%s,\n%s,\n%s,\n%s, \n%s\n}" mandatory_json optional_json edge_to_from_state_json rec_expr_init_json !edge_json in
+  ((start, g), json)

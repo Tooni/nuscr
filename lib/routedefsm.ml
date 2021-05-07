@@ -42,8 +42,14 @@ let silent_vars_and_rec_expr_updates_str {silent_vars; rec_expr_updates} =
   let silent_vars =
     String.concat ~sep:",\n"
       (List.map
-          ~f:(fun (v, t) ->
-            sprintf {|"%s": "%s"|} (VariableName.user v) (fst @@ show_payload_type t) )
+          ~f:(fun (v, ty) ->
+            let sort, refinement = show_payload_type ty in
+            let sort = encase sort in
+            let refinement = if String.equal refinement "" then encase refinement else refinement in
+            sprintf {|{"name": %s,
+"sort": %s,
+"refinement": %s}|} 
+              (encase @@ VariableName.user v) sort refinement )
           silent_vars)
   in
   let rec_expr_updates =
@@ -104,10 +110,10 @@ let show_action =
 "role": %s,
 "label": %s,
 "payloads": [%s],
-"silents": {%s},
+"silents": [%s],
 "rec_expr_updates": {%s}
 }|} 
-      (encase action) 
+      (encase action)
       (encase @@ RoleName.user r)
       (encase @@ LabelName.user msg.label)
       (String.concat ~sep:",\n" (List.folding_map ~init:1 ~f:payloads_str msg.payload))
@@ -488,12 +494,11 @@ let of_global_type gty ~role ~server =
   in
   edge_json := String.drop_suffix !edge_json 1 (* drop trailing comma *)
   ; edge_json := "\"edges\": {" ^ !edge_json ^ "\n}"
-  ; let json = sprintf "\n\n{\n%s,\n%s,\n%s,\n%s\n}" mandatory_json optional_json rec_expr_init_json !edge_json in
-  let g = env.g in
+  ; let g = env.g in
   let state_to_rec_var = env.state_to_rec_var in
   if not @@ List.is_empty env.states_to_merge then (* TODO: add rec_var unimpl thing *)
     let rec aux (start, g, (state_to_rec_var:rec_var_info)) = function
-      | [] -> ((start, g), json)
+      | [] -> (start, g)
       | (s1, s2) :: rest ->
           let to_state = Int.min s1 s2 in
           let from_state = Int.max s1 s2 in
@@ -523,5 +528,16 @@ let of_global_type gty ~role ~server =
           in
           aux (start, g, state_to_rec_var) rest
     in
-    aux (start, g, state_to_rec_var) env.states_to_merge
-  else ((start, g), json)
+    let (s, g) = aux (start, g, state_to_rec_var) env.states_to_merge in
+    let edge_to_from_state_json = G.fold_edges_e
+      (fun (from, label, _) s -> 
+        s ^ sprintf {|"%s": "%s",|} (show_action_ref label) (Int.to_string from))
+      g "{"
+    in
+    let edge_to_from_state_json = String.drop_suffix edge_to_from_state_json 1 ^ "}" in (*trailing comma*)
+    let edge_to_from_state_json = sprintf {|"froms": %s|} edge_to_from_state_json in
+    let json = sprintf "\n\n{\n%s,\n%s,\n%s,\n%s, \n%s\n}" mandatory_json optional_json edge_to_from_state_json rec_expr_init_json !edge_json in
+    ((s, g), json)
+  else 
+    let json = sprintf "\n\n{\n%s,\n%s,\n%s, \n%s\n}" mandatory_json optional_json rec_expr_init_json !edge_json in
+    ((start, g), json)

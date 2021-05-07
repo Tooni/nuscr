@@ -528,7 +528,7 @@ let of_global_type gty ~role ~server =
           in
           aux (start, g, state_to_rec_var) rest
     in
-    let (s, g) = aux (start, g, state_to_rec_var) env.states_to_merge in
+    let (start, g) = aux (start, g, state_to_rec_var) env.states_to_merge in
     let edge_to_from_state_json = G.fold_edges_e
       (fun (from, label, _) s -> 
         s ^ sprintf {|"%s": "%s",|} (show_action_ref label) (Int.to_string from))
@@ -537,7 +537,7 @@ let of_global_type gty ~role ~server =
     let edge_to_from_state_json = String.drop_suffix edge_to_from_state_json 1 ^ "}" in (*trailing comma*)
     let edge_to_from_state_json = sprintf {|"froms": %s|} edge_to_from_state_json in
     let json = sprintf "\n\n{\n%s,\n%s,\n%s,\n%s, \n%s\n}" mandatory_json optional_json edge_to_from_state_json rec_expr_init_json !edge_json in
-    ((s, g), json)
+    ((start, g), json)
   else 
     let json = sprintf "\n\n{\n%s,\n%s,\n%s, \n%s\n}" mandatory_json optional_json rec_expr_init_json !edge_json in
     ((start, g), json)

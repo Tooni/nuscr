@@ -535,7 +535,7 @@ let of_global_type gty ~role ~server =
   in
   let edge_to_from_state_json = G.fold_edges_e
       (fun (from, label, _) s -> 
-        s ^ sprintf {|"%s": "%s",|} (show_action_ref label) (Int.to_string from))
+        s ^ sprintf {|"%s": "S%s",|} (show_action_ref label) (Int.to_string from))
       g "{"
     in
   let edge_to_from_state_json = String.drop_suffix edge_to_from_state_json 1 ^ "}" in (*trailing comma*)

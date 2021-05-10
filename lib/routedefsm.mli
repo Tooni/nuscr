@@ -11,7 +11,10 @@ type refinement_action_annot =
   { silent_vars: (VariableName.t * Expr.payload_type) list
         (** List of silent variables and their types *)
   ; rec_expr_updates: (string * Expr.t) list
-        (** List of updates to recursion variables *) }
+        (** List of updates to recursion variables *)
+  ; tv_resets: TypeVariableName.t list
+        (** List of recursion variables that should be reset
+            because we've exited their scope. *) }
 [@@deriving ord, sexp_of]
   
 (** Transitions in the EFSM *)

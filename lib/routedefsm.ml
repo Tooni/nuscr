@@ -7,7 +7,8 @@ open Err
 
 type refinement_action_annot =
   { silent_vars: (VariableName.t * Expr.payload_type) list
-  ; rec_expr_updates: (string * Expr.t) list }
+  ; rec_expr_updates: (string * Expr.t) list
+  ; tv_resets: TypeVariableName.t list}
 [@@deriving ord, sexp_of]
 
 let encase = sprintf "\"%s\""
@@ -38,7 +39,7 @@ let rec show_payload_type =
   | Expr.PTString -> ("string", no_refinement)
   | Expr.PTUnit -> ("null", no_refinement)
 
-let silent_vars_and_rec_expr_updates_str {silent_vars; rec_expr_updates} =
+let silent_vars_and_rec_expr_updates_str {silent_vars; rec_expr_updates; tv_resets} =
   let silent_vars =
     String.concat ~sep:",\n"
       (List.map
@@ -53,10 +54,11 @@ let silent_vars_and_rec_expr_updates_str {silent_vars; rec_expr_updates} =
           silent_vars)
   in
   let rec_expr_updates =
-    String.concat ~sep:{|,|} (List.map ~f:(fun (n, r) -> 
+    String.concat ~sep:"," (List.map ~f:(fun (n, r) -> 
       encase n ^ ": " ^ refinement_str r) rec_expr_updates)
   in
-  silent_vars, rec_expr_updates
+  let tv_resets = String.concat ~sep:"," (List.map ~f:(fun tv -> encase @@ TypeVariableName.user tv) tv_resets) in
+  silent_vars, rec_expr_updates, tv_resets
 
 let name_sort_refinement pl pl_num = 
   (match pl with 
@@ -103,7 +105,7 @@ let show_action =
     let action =
       match a with SendA _ -> "!" | RecvA _ -> "?" | _ -> assert false
     in
-    let svars, rec_expr_updates = silent_vars_and_rec_expr_updates_str annot_as in
+    let svars, rec_expr_updates, tv_resets = silent_vars_and_rec_expr_updates_str annot_as in
     sprintf 
       {|{
 "op": %s,
@@ -111,7 +113,8 @@ let show_action =
 "label": %s,
 "payloads": [%s],
 "silents": [%s],
-"rec_expr_updates": {%s}
+"rec_expr_updates": {%s},
+"tv_resets": [%s]
 }|} 
       (encase action)
       (encase @@ RoleName.user r)
@@ -119,6 +122,7 @@ let show_action =
       (String.concat ~sep:",\n" (List.folding_map ~init:1 ~f:payloads_str msg.payload))
       (svars)
       (rec_expr_updates)
+      (tv_resets)
 
 module Label = struct
   module M = struct
@@ -173,7 +177,7 @@ type rec_var_info = (bool * Gtype.rec_var) list Map.M(Int).t
 
 type efsm_conv_env =
   { g: G.t
-  ; tyvars: (TypeVariableName.t * int) list
+  ; tyvars: (TypeVariableName.t * (int * (TypeVariableName.t list))) list
   ; states_to_merge: (int * int) list
   ; active_roles: (RoleName.t, RoleName.comparator_witness) Set.t
   ; role_activations: (RoleName.t * RoleName.t * (message * int)) list 
@@ -236,6 +240,7 @@ let of_global_type gty ~role ~server =
   let make_refinement_annotation env next_l =
     if Config.refinement_type_enabled () then
       let silent_vars = env.silent_var_buffer in
+      let tv_resets = ref [] in
       let rec aux:(Gtype.t -> (string * Expr.t) list) = (function
       | ChoiceG (selector, ls) ->
         let branch_updates = List.map ~f:snd @@ List.concat @@ List.map ~f:aux ls in
@@ -244,7 +249,11 @@ let of_global_type gty ~role ~server =
           uerr @@ RecExpressionUpdatesNonUniform selector
         ; aux @@ List.hd_exn ls
       | TVarG (tv, rec_exprs, _) ->
-        let check_expr silent_vars e =
+        let curr_tvs = Set.of_list (module TypeVariableName) @@ List.map ~f:fst env.tyvars in
+        let (_, prev_tvs) = List.Assoc.find_exn ~equal:TypeVariableName.equal env.tyvars tv in
+        let prev_tvs = Set.of_list (module TypeVariableName) prev_tvs in
+        tv_resets := Set.to_list @@ Set.diff curr_tvs prev_tvs
+        ; let check_expr silent_vars e =
           let free_vars = Expr.free_var e in
           let unknown_vars = Set.inter free_vars silent_vars in
           if not @@ Set.is_empty unknown_vars then
@@ -275,8 +284,8 @@ let of_global_type gty ~role ~server =
         [])
       in
       let rec_expr_updates = aux next_l in
-      ({env with silent_var_buffer= []}, {silent_vars; rec_expr_updates})
-    else (env, {silent_vars= []; rec_expr_updates= []})
+      ({env with silent_var_buffer= []}, {silent_vars; rec_expr_updates; tv_resets= !tv_resets})
+    else (env, {silent_vars= []; rec_expr_updates= []; tv_resets= []})
   in
   let seen_choice = ref false in
   let mandatory_active_roles = ref (Set.add (Set.empty (module RoleName)) server) in
@@ -356,7 +365,7 @@ let of_global_type gty ~role ~server =
       let g = G.add_vertex g new_st in
       let env =
         { env with
-          tyvars= (tv, new_st) :: tyvars
+          tyvars= (tv, (new_st, tv :: List.map tyvars ~f:(fun (tv', _) -> tv'))) :: tyvars
         ; g
         ; state_to_rec_var= Map.set env.state_to_rec_var ~key:new_st ~data:rec_vars
         ; tv_to_rec_var = Map.add_exn env.tv_to_rec_var ~key:tv ~data:rec_vars
@@ -367,7 +376,7 @@ let of_global_type gty ~role ~server =
         let name = rec_var.rv_name in
         let init = rec_var.rv_init_expr in
         let ty = rec_var.rv_ty in
-        rec_expr_inits := (name, init, ty) :: !rec_expr_inits)
+        rec_expr_inits := (name, tv, init, ty) :: !rec_expr_inits)
       ; let env, curr = conv_gtype_aux env l in
       let g = env.g in
       let g = G.add_edge_e g (new_st, EpsilonRef, curr) in
@@ -375,7 +384,7 @@ let of_global_type gty ~role ~server =
       ({env with g; states_to_merge}, curr)
     | TVarG (tv, _, _) ->
       (*(Caml.Format.print_string ("tyvar\n")) ;*)
-      let st = List.Assoc.find_exn ~equal:TypeVariableName.equal env.tyvars tv in
+      let (st, _) = List.Assoc.find_exn ~equal:TypeVariableName.equal env.tyvars tv in
         (env, st)
     | ChoiceG (chooser, ls) ->
       let active_roles = Set.add active_roles chooser in
@@ -484,12 +493,13 @@ let of_global_type gty ~role ~server =
     "\"rec_exprs\": {\n" ^ 
       String.concat ~sep:"," 
         (List.map !rec_expr_inits
-          ~f:(fun (n, init, ty) ->
+          ~f:(fun (n, tv, init, ty) ->
             let sort, refinement = show_payload_type ty in
             let sort = encase sort in
             let refinement = if String.equal refinement "" then encase refinement else refinement in
             let init = refinement_str init in
-            sprintf {|"%s": {"sort": %s, "refinement": %s, "init": %s}|} (VariableName.user n) sort refinement init))
+            sprintf {|"%s": {"typevar": "%s", "sort": %s, "refinement": %s, "init": %s}|} 
+              (VariableName.user n) (TypeVariableName.user tv) sort refinement init))
     ^ "\n}"
   in
   edge_json := String.drop_suffix !edge_json 1 (* drop trailing comma *)

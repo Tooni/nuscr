@@ -172,16 +172,12 @@ let show g =
   Caml.Format.pp_print_flush formatter () ;
   Buffer.contents buffer
 
-
-type rec_var_info = (bool * Gtype.rec_var) list Map.M(Int).t
-
 type efsm_conv_env =
   { g: G.t
   ; tyvars: (TypeVariableName.t * (int * (TypeVariableName.t list))) list
   ; states_to_merge: (int * int) list
   ; active_roles: (RoleName.t, RoleName.comparator_witness) Set.t
   ; role_activations: (RoleName.t * RoleName.t * (message * int)) list 
-  ; state_to_rec_var: (bool * Gtype.rec_var) list Map.M(Int).t
   ; tv_to_rec_var: (bool * Gtype.rec_var) list Map.M(TypeVariableName).t
   ; silent_var_buffer: (VariableName.t * Expr.payload_type) list 
   ; svars: (VariableName.t, VariableName.comparator_witness) Set.t }
@@ -191,7 +187,6 @@ let init_efsm_conv_env:efsm_conv_env =
   ; states_to_merge= []
   ; active_roles= Set.empty (module RoleName)
   ; role_activations= [] 
-  ; state_to_rec_var= Map.empty (module Int)
   ; tv_to_rec_var= Map.empty (module TypeVariableName)
   ; silent_var_buffer= []
   ; svars= Set.empty (module VariableName) }
@@ -367,7 +362,6 @@ let of_global_type gty ~role ~server =
         { env with
           tyvars= (tv, (new_st, tv :: List.map tyvars ~f:(fun (tv', _) -> tv'))) :: tyvars
         ; g
-        ; state_to_rec_var= Map.set env.state_to_rec_var ~key:new_st ~data:rec_vars
         ; tv_to_rec_var = Map.add_exn env.tv_to_rec_var ~key:tv ~data:rec_vars
         }
       in
@@ -392,6 +386,9 @@ let of_global_type gty ~role ~server =
         mandatory_active_roles := Set.add !mandatory_active_roles chooser
       ; seen_choice := true
       
+      ; if 1 < List.count ~f:(fun l -> match l with MuG _ -> true | _ -> false) ls then
+        (Err.unimpl "Multiple recursions with variables in choices")
+
       ; let curr = fresh () in
       let choice_active_rs = ref [] in
       let choice_r_activations:((RoleName.t * RoleName.t * (message * state)) list list ref) = ref [] in
@@ -505,10 +502,9 @@ let of_global_type gty ~role ~server =
   edge_json := String.drop_suffix !edge_json 1 (* drop trailing comma *)
   ; edge_json := "\"edges\": {" ^ !edge_json ^ "\n}"
   ; let g = env.g in
-  let state_to_rec_var = env.state_to_rec_var in
   let (start, g) = 
     if not @@ List.is_empty env.states_to_merge then
-      (let rec aux (start, g, (state_to_rec_var:rec_var_info)) = function
+      (let rec aux (start, g) = function
         | [] -> (start, g)
         | (s1, s2) :: rest ->
             let to_state = Int.min s1 s2 in
@@ -524,22 +520,9 @@ let of_global_type gty ~role ~server =
                   (x, y))
                 rest
             in
-            let state_to_rec_var =
-              if from_state = to_state then state_to_rec_var else
-              match Map.find state_to_rec_var from_state with
-              | None -> state_to_rec_var
-              | Some rv ->
-                  Map.update
-                    ~f:(function
-                      | Some _ ->
-                        (Err.unimpl
-                          "Multiple recursions with variables in choices")
-                      | None -> rv)
-                    state_to_rec_var to_state
-            in
-            aux (start, g, state_to_rec_var) rest
+            aux (start, g) rest
       in
-      aux (start, g, state_to_rec_var) env.states_to_merge)
+      aux (start, g) env.states_to_merge)
     else 
       (start, g)
   in

@@ -7,6 +7,7 @@ type t =
   ; sender_validate_refinements: bool
   ; receiver_validate_refinements: bool
   ; validate_refinement_satisfiability: bool
+  ; validate_refinement_progress: bool
   ; verbose: bool }
 
 let default =
@@ -16,6 +17,7 @@ let default =
   ; sender_validate_refinements= false
   ; receiver_validate_refinements= false
   ; validate_refinement_satisfiability= false
+  ; validate_refinement_progress= false
   ; verbose= false }
 
 let config = ref default
@@ -51,6 +53,11 @@ let validate_refinement_satisfiability () =
 let set_validate_refinement_satisfiability validate_refinement_satisfiability
     =
   config := {!config with validate_refinement_satisfiability}
+
+let validate_refinement_progress () = !config.validate_refinement_progress
+
+let set_validate_refinement_progress validate_refinement_progress =
+  config := {!config with validate_refinement_progress}
 
 let verbose () = !config.verbose
 
@@ -100,6 +107,8 @@ let load_from_pragmas pragmas =
         set_receiver_validate_refinements true
     | Syntax.ValidateRefinementSatisfiability, _ ->
         set_validate_refinement_satisfiability true
+    | Syntax.ValidateRefinementProgress, _ ->
+        set_validate_refinement_progress true
     | Syntax.ShowPragmas, _ | Syntax.PrintUsage, _ -> ()
   in
   List.iter ~f:process_global_pragma pragmas ;

@@ -18,6 +18,8 @@ type pragma =
   | RefinementTypes
   | SenderValidateRefinements
   | ReceiverValidateRefinements
+  | ValidateRefinementSatisfiability
+  | ValidateRefinementProgress
 [@@deriving show]
 
 let pragma_of_string str : pragma =
@@ -29,6 +31,8 @@ let pragma_of_string str : pragma =
   | "RefinementTypes" -> RefinementTypes
   | "SenderValidateRefinements" -> SenderValidateRefinements
   | "ReceiverValidateRefinements" -> ReceiverValidateRefinements
+  | "ValidateRefinementSatisfiability" -> ValidateRefinementSatisfiability
+  | "ValidateRefinementProgress" -> ValidateRefinementProgress
   | prg -> Err.UnknownPragma prg |> Err.uerr
 
 type pragmas = (pragma * string option) list [@@deriving show]

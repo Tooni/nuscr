@@ -222,7 +222,93 @@ let merge_state ~from_state ~to_state g =
     let g = G.remove_vertex g from_state in
     g
 
-(*let get_all_refinements.......*)
+(* checks if there is a 'continue Loop [recExprUpdate]' next *)
+(* and applys an annotation to the current message for it *)
+let make_refinement_annotation role env next_l =
+  if Config.refinement_type_enabled () then
+    let silent_vars = env.silent_var_buffer in
+    let tv_resets = ref [] in
+    let rec aux = (function
+    | ChoiceG (selector, ls) ->
+      let branch_updates = List.map ~f:snd @@ List.concat @@ List.map ~f:aux ls in
+      let dedupped_branch_updates = List.dedup_and_sort ~compare:Expr.compare branch_updates in
+      if List.length dedupped_branch_updates > 1 then
+        uerr @@ RecExpressionUpdatesNonUniform selector
+      ; aux @@ List.hd_exn ls
+    | TVarG (tv, rec_exprs, _) ->
+      let curr_tvs = Set.of_list (module TypeVariableName) @@ List.map ~f:fst env.tyvars in
+      let (_, prev_tvs) = List.Assoc.find_exn ~equal:TypeVariableName.equal env.tyvars tv in
+      let prev_tvs = Set.of_list (module TypeVariableName) prev_tvs in
+      tv_resets := Set.to_list @@ Set.diff curr_tvs prev_tvs
+      ; let check_expr silent_vars e =
+        let free_vars = Expr.free_var e in
+        let unknown_vars = Set.inter free_vars silent_vars in
+        if not @@ Set.is_empty unknown_vars then
+          uerr
+            (UnknownVariableValue (role, Set.choose_exn unknown_vars))
+      in
+      let rec_expr_filter = Map.find_exn env.tv_to_rec_var tv in
+      let rec_exprs =
+        List.map2_exn
+          ~f:(fun (x, _) y -> if not x then Some y else None)
+          rec_expr_filter rec_exprs
+      in
+      let rec_expr_name = if not @@ List.is_empty rec_expr_filter then
+          VariableName.user (snd @@ List.hd_exn rec_expr_filter).rv_name 
+        else
+          ""
+      in
+      let rec_exprs = List.filter_opt rec_exprs in
+      List.iter ~f:(check_expr env.svars) rec_exprs
+      ; let rec_exprs = List.map ~f:(fun r -> (rec_expr_name, r)) rec_exprs in
+      rec_exprs
+    | MessageG (_, s, r, l') ->
+      if RoleName.equal role s || RoleName.equal role r then
+        []
+      else
+        aux l'
+    | _ ->
+      [])
+    in
+    let rec_expr_updates = aux next_l in
+    ({env with silent_var_buffer= []}, {silent_vars; rec_expr_updates; tv_resets= !tv_resets})
+  else (env, {silent_vars= []; rec_expr_updates= []; tv_resets= []})
+
+let first_msg_is_distinct_and_from_chooser chooser ar ras =
+  let label_equals (pl1, lab1) (pl2, lab2) = (* should this check payloads too?? *)
+    List.length pl1 = List.length pl2 &&
+      List.for_all2_exn pl1 pl2 ~f:Gtype.equal_payload &&
+      LabelName.equal lab1 lab2
+  in
+  let msgs_so_far = ref [] in
+  RoleName.equal ar chooser || (* chooser doesn't need to receive from chooser *)
+  List.for_all ras ~f:(fun se ->
+    match List.find se ~f:(fun (s, r, _) -> RoleName.equal r ar || RoleName.equal s ar) with
+      | Some (s, _, (m, _)) -> 
+        let (pl, lab) = (m.payload, m.label) in
+        let is_distinct_msg = not @@ List.mem !msgs_so_far (pl, lab) ~equal:label_equals in
+        msgs_so_far := (pl, lab) :: !msgs_so_far
+        ; RoleName.equal s chooser && is_distinct_msg
+      | None -> false)
+
+let role_does_nothing_in_all_branches server ar ras =
+  not @@ RoleName.equal ar server && (* server can't do nothing as it must get informed of the choice *)
+  List.for_all ras ~f:(fun se -> 
+    not @@ List.exists se ~f:(fun (s, r, _) ->
+      RoleName.equal s ar || RoleName.equal r ar))
+
+(* ordered flattening *)
+(* e.g. [[1,2,3,4],[a,b,c]] --> [1,a,2,b,3,c,4] *)
+(* to make nested choices not cause outermost choice's well-formed/branched check to fail *)
+let rec get_ordered_role_activations' result ras =
+  if List.for_all ~f:List.is_empty ras then
+    !result
+  else
+    let leftover_cras = List.map ~f:(fun ra ->
+      result := !result @ (List.take ra 1)
+      ; List.drop ra 1) ras
+    in
+    get_ordered_role_activations' result leftover_cras
 
 (*todo: check that ~role is actually mentioned in protocol definition*)
 let of_global_type gty ~role ~server =
@@ -232,63 +318,13 @@ let of_global_type gty ~role ~server =
     count := n + 1 ;
     n
   in
-  let make_refinement_annotation env next_l =
-    if Config.refinement_type_enabled () then
-      let silent_vars = env.silent_var_buffer in
-      let tv_resets = ref [] in
-      let rec aux:(Gtype.t -> (string * Expr.t) list) = (function
-      | ChoiceG (selector, ls) ->
-        let branch_updates = List.map ~f:snd @@ List.concat @@ List.map ~f:aux ls in
-        let dedupped_branch_updates = List.dedup_and_sort ~compare:Expr.compare branch_updates in
-        if List.length dedupped_branch_updates > 1 then
-          uerr @@ RecExpressionUpdatesNonUniform selector
-        ; aux @@ List.hd_exn ls
-      | TVarG (tv, rec_exprs, _) ->
-        let curr_tvs = Set.of_list (module TypeVariableName) @@ List.map ~f:fst env.tyvars in
-        let (_, prev_tvs) = List.Assoc.find_exn ~equal:TypeVariableName.equal env.tyvars tv in
-        let prev_tvs = Set.of_list (module TypeVariableName) prev_tvs in
-        tv_resets := Set.to_list @@ Set.diff curr_tvs prev_tvs
-        ; let check_expr silent_vars e =
-          let free_vars = Expr.free_var e in
-          let unknown_vars = Set.inter free_vars silent_vars in
-          if not @@ Set.is_empty unknown_vars then
-            uerr
-              (UnknownVariableValue (role, Set.choose_exn unknown_vars))
-        in
-        let rec_expr_filter = Map.find_exn env.tv_to_rec_var tv in
-        let rec_exprs =
-          List.map2_exn
-            ~f:(fun (x, _) y -> if not x then Some y else None)
-            rec_expr_filter rec_exprs
-        in
-        let rec_expr_name = if not @@ List.is_empty rec_expr_filter then
-            VariableName.user (snd @@ List.hd_exn rec_expr_filter).rv_name 
-          else
-            ""
-        in
-        let rec_exprs = List.filter_opt rec_exprs in
-        List.iter ~f:(check_expr env.svars) rec_exprs
-        ; let rec_exprs = List.map ~f:(fun r -> (rec_expr_name, r)) rec_exprs in
-        rec_exprs
-      | MessageG (_, s, r, l') ->
-        if RoleName.equal role s || RoleName.equal role r then
-          []
-        else
-          aux l'
-      | _ ->
-        [])
-      in
-      let rec_expr_updates = aux next_l in
-      ({env with silent_var_buffer= []}, {silent_vars; rec_expr_updates; tv_resets= !tv_resets})
-    else (env, {silent_vars= []; rec_expr_updates= []; tv_resets= []})
-  in
   let seen_choice = ref false in
   let mandatory_active_roles = ref (Set.add (Set.empty (module RoleName)) server) in
   let optional_active_roles = ref (Set.empty (module RoleName)) in
   let edge_json = ref "" in
   let rec_expr_inits = ref [] in
   let terminal = ref ~-1 in
-  let rec conv_gtype_aux env=
+  let rec conv_gtype_aux env =
     let {g; tyvars; active_roles; role_activations; _} = env in
     let terminate () =
       if !terminal = ~-1 then
@@ -311,25 +347,23 @@ let of_global_type gty ~role ~server =
       let active_roles = Set.add active_roles send_n in
       match role with
       | _ when RoleName.equal role send_n || RoleName.equal role recv_n ->
-        (*(Caml.Format.print_string ("send\n")) ;*)
         let curr = fresh () in
         let role_activations = role_activations @ [(send_n, recv_n, (m, curr))] in 
-        let env, rannot = make_refinement_annotation env l in
+        let env, rannot = make_refinement_annotation role env l in
         let env, next = conv_gtype_aux {env with active_roles; role_activations} l in
         let a = if RoleName.equal role send_n then
-          SendA (recv_n, m, rannot)
-        else (* if role equals recv_n *)
-          RecvA (send_n, m, rannot)
+            SendA (recv_n, m, rannot)
+          else (* if role equals recv_n *)
+            RecvA (send_n, m, rannot)
         in
         let ref_a = RefA (Int.to_string curr ^ Int.to_string next) in
-        edge_json := sprintf "%s\n\"%s\": %s," (!edge_json) (show_action_ref ref_a) (show_action a) ;
-        let e = (curr, ref_a, next) in
+        edge_json := sprintf "%s\n\"%s\": %s," (!edge_json) (show_action_ref ref_a) (show_action a)
+        ; let e = (curr, ref_a, next) in
         let g = env.g in
         let g = G.add_vertex g curr in
         let g = G.add_edge_e g e in
         ({env with g}, curr)
       | _ ->
-        (*(Caml.Format.print_string ("other\n")) ;*)
         let role_activations = role_activations @ [(send_n, recv_n, (m, !count))] in
         let named_payloads =
           List.rev_filter_map
@@ -377,7 +411,6 @@ let of_global_type gty ~role ~server =
       let states_to_merge = (new_st, curr) :: env.states_to_merge in
       ({env with g; states_to_merge}, curr)
     | TVarG (tv, _, _) ->
-      (*(Caml.Format.print_string ("tyvar\n")) ;*)
       let (st, _) = List.Assoc.find_exn ~equal:TypeVariableName.equal env.tyvars tv in
         (env, st)
     | ChoiceG (chooser, ls) ->
@@ -401,44 +434,20 @@ let of_global_type gty ~role ~server =
         ) ~init:{env with role_activations= []} ls
       in
 
-      let first_msg_is_distinct_and_from_chooser = fun ar ras ->
-        let label_equals (pl1, lab1) (pl2, lab2) = (* should this check payloads too?? *)
-          List.length pl1 = List.length pl2 &&
-            List.for_all2_exn pl1 pl2 ~f:Gtype.equal_payload &&
-            LabelName.equal lab1 lab2
-        in
-        let msgs_so_far = ref [] in
-        RoleName.equal ar chooser || (* chooser doesn't need to receive from chooser *)
-        List.for_all ras ~f:(fun se ->
-          match List.find se ~f:(fun (s, r, _) -> RoleName.equal r ar || RoleName.equal s ar) with
-            | Some (s, _, (m, _)) -> 
-              let (pl, lab) = (m.payload, m.label) in
-              let is_distinct_msg = not @@ List.mem !msgs_so_far (pl, lab) ~equal:label_equals in
-              msgs_so_far := (pl, lab) :: !msgs_so_far
-              ; RoleName.equal s chooser && is_distinct_msg
-            | None -> false)
-      in
-      let role_does_nothing_in_all_branches = fun ar ras -> 
-        not @@ RoleName.equal ar server && (* server can't do nothing as it must get informed of the choice *)
-        List.for_all ras ~f:(fun se -> 
-          not @@ List.exists se ~f:(fun (s, r, _) ->
-            RoleName.equal s ar || RoleName.equal r ar))
-      in
-      
       (* check over previous active roles *)
       Set.iter active_roles 
         ~f:(fun ar -> 
-          if not @@ first_msg_is_distinct_and_from_chooser ar !choice_r_activations 
-            && not @@ role_does_nothing_in_all_branches ar !choice_r_activations then
+          if not @@ first_msg_is_distinct_and_from_chooser chooser ar !choice_r_activations
+            && not @@ role_does_nothing_in_all_branches server ar !choice_r_activations then
               uerr (BranchErrorPrevious (chooser, ar))
           )
                                                  
+      (* check over newly active roles *)
       ; let new_rs = List.map ~f:(fun l_rs -> Set.diff l_rs active_roles) !choice_active_rs in
       optional_active_roles := Set.union !optional_active_roles (Set.union_list (module RoleName) new_rs)
       ; let ars_and_ras = List.zip_exn new_rs !choice_r_activations in
       List.iter ~f:(fun (ars, ras) ->
-        (* check over newly active roles *)
-        if not @@ Set.for_all ~f:(fun r -> first_msg_is_distinct_and_from_chooser r [ras]) ars then
+        if not @@ Set.for_all ~f:(fun r -> first_msg_is_distinct_and_from_chooser chooser r [ras]) ars then
             uerr (BranchErrorNew (chooser, Set.to_list ars))
         ) ars_and_ras ;
       let g = env.g in
@@ -453,21 +462,6 @@ let of_global_type gty ~role ~server =
       let g = List.fold ~f:G.add_edge_e ~init:g es in
       let states_to_merge =
           List.map ~f:(fun next -> (curr, next)) non_terminal_nexts @ env.states_to_merge
-      in
-
-      let rec get_ordered_role_activations' result ras =
-        (* ordered flattening *)
-        (* e.g. [[1,2,3,4],[a,b,c],[x,y]] --> [1,a,x,2,b,y,3,c,4] *)
-        (* to make nested choices not cause outermost choice's well-formed/branched check to fail *)
-        if List.for_all ~f:List.is_empty ras then
-          !result
-        else
-          let leftover_cras = List.map ~f:(fun ra ->
-            result := !result @ (List.take ra 1)
-            ; List.drop ra 1
-          ) ras
-          in
-          get_ordered_role_activations' result leftover_cras
       in
       let get_ordered_role_activations = get_ordered_role_activations' (ref []) in
       let role_activations = role_activations @ (get_ordered_role_activations !choice_r_activations) in

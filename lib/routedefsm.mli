@@ -8,9 +8,7 @@ type action_ref =
 
 (** Annotation for refined actions *)
 type refinement_action_annot =
-  { silent_vars: (VariableName.t * Expr.payload_type) list
-        (** List of silent variables and their types *)
-  ; rec_expr_updates: (string * Expr.t) list
+  { rec_expr_updates: (string * Expr.t) list
         (** List of updates to recursion variables *)
   ; tv_resets: TypeVariableName.t list
         (** List of recursion variables that should be reset

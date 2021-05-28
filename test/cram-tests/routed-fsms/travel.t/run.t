@@ -35,7 +35,6 @@ Generate FSM for Travel protocol, for role C.
   "sort": "number",
   "refinement": ""
   }],
-  "silents": [],
   "rec_expr_updates": {},
   "tv_resets": []
   },
@@ -48,7 +47,6 @@ Generate FSM for Travel protocol, for role C.
   "sort": "string",
   "refinement": ""
   }],
-  "silents": [],
   "rec_expr_updates": {},
   "tv_resets": []
   },
@@ -61,7 +59,6 @@ Generate FSM for Travel protocol, for role C.
   "sort": "number",
   "refinement": ""
   }],
-  "silents": [],
   "rec_expr_updates": {},
   "tv_resets": []
   },
@@ -74,7 +71,6 @@ Generate FSM for Travel protocol, for role C.
   "sort": "number",
   "refinement": ""
   }],
-  "silents": [],
   "rec_expr_updates": {},
   "tv_resets": []
   },
@@ -87,7 +83,6 @@ Generate FSM for Travel protocol, for role C.
   "sort": "string",
   "refinement": ""
   }],
-  "silents": [],
   "rec_expr_updates": {},
   "tv_resets": []
   },
@@ -96,7 +91,6 @@ Generate FSM for Travel protocol, for role C.
   "role": "A",
   "label": "reject",
   "payloads": [],
-  "silents": [],
   "rec_expr_updates": {},
   "tv_resets": []
   }

@@ -44,7 +44,6 @@ Generate FSM for OnlineWallet protocol, for Customer role.
   "e1": "payment",
   "e2": "bill"}
   }],
-  "silents": [],
   "rec_expr_updates": {},
   "tv_resets": []
   },
@@ -53,7 +52,6 @@ Generate FSM for OnlineWallet protocol, for Customer role.
   "role": "Wallet",
   "label": "authorise",
   "payloads": [],
-  "silents": [],
   "rec_expr_updates": {},
   "tv_resets": []
   },
@@ -62,7 +60,6 @@ Generate FSM for OnlineWallet protocol, for Customer role.
   "role": "Vendor",
   "label": "reject",
   "payloads": [],
-  "silents": [],
   "rec_expr_updates": {},
   "tv_resets": []
   },
@@ -71,7 +68,6 @@ Generate FSM for OnlineWallet protocol, for Customer role.
   "role": "Wallet",
   "label": "reject",
   "payloads": [],
-  "silents": [],
   "rec_expr_updates": {},
   "tv_resets": []
   },
@@ -86,7 +82,6 @@ Generate FSM for OnlineWallet protocol, for Customer role.
   "e1": "bill",
   "e2": "0"}
   }],
-  "silents": [],
   "rec_expr_updates": {},
   "tv_resets": []
   },
@@ -95,7 +90,6 @@ Generate FSM for OnlineWallet protocol, for Customer role.
   "role": "Wallet",
   "label": "login_ok",
   "payloads": [],
-  "silents": [],
   "rec_expr_updates": {},
   "tv_resets": []
   },
@@ -110,7 +104,6 @@ Generate FSM for OnlineWallet protocol, for Customer role.
   "e1": "try",
   "e2": "3"}
   }],
-  "silents": [],
   "rec_expr_updates": {"try": {"binop": "+",
   "e1": "try",
   "e2": "1"}},
@@ -127,7 +120,6 @@ Generate FSM for OnlineWallet protocol, for Customer role.
   "e1": "try",
   "e2": "3"}
   }],
-  "silents": [],
   "rec_expr_updates": {},
   "tv_resets": []
   },
@@ -146,7 +138,6 @@ Generate FSM for OnlineWallet protocol, for Customer role.
   "e1": "pin",
   "e2": "10000"}}
   }],
-  "silents": [],
   "rec_expr_updates": {},
   "tv_resets": []
   },
@@ -165,7 +156,6 @@ Generate FSM for OnlineWallet protocol, for Customer role.
   "e1": "account",
   "e2": "1000000"}}
   }],
-  "silents": [],
   "rec_expr_updates": {},
   "tv_resets": []
   }

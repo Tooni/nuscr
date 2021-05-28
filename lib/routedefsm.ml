@@ -6,8 +6,7 @@ open Graph
 open Err
 
 type refinement_action_annot =
-  { silent_vars: (VariableName.t * Expr.payload_type) list
-  ; rec_expr_updates: (string * Expr.t) list
+  { rec_expr_updates: (string * Expr.t) list
   ; tv_resets: TypeVariableName.t list}
 [@@deriving ord, sexp_of]
 
@@ -39,26 +38,13 @@ let rec show_payload_type =
   | Expr.PTString -> ("string", no_refinement)
   | Expr.PTUnit -> ("null", no_refinement)
 
-let silent_vars_and_rec_expr_updates_str {silent_vars; rec_expr_updates; tv_resets} =
-  let silent_vars =
-    String.concat ~sep:",\n"
-      (List.map
-          ~f:(fun (v, ty) ->
-            let sort, refinement = show_payload_type ty in
-            let sort = encase sort in
-            let refinement = if String.equal refinement "" then encase refinement else refinement in
-            sprintf {|{"name": %s,
-"sort": %s,
-"refinement": %s}|} 
-              (encase @@ VariableName.user v) sort refinement )
-          silent_vars)
-  in
+let rec_expr_updates_str {rec_expr_updates; tv_resets} =
   let rec_expr_updates =
     String.concat ~sep:"," (List.map ~f:(fun (n, r) -> 
       encase n ^ ": " ^ refinement_str r) rec_expr_updates)
   in
   let tv_resets = String.concat ~sep:"," (List.map ~f:(fun tv -> encase @@ TypeVariableName.user tv) tv_resets) in
-  silent_vars, rec_expr_updates, tv_resets
+  rec_expr_updates, tv_resets
 
 let name_sort_refinement pl pl_num = 
   (match pl with 
@@ -105,14 +91,13 @@ let show_action =
     let action =
       match a with SendA _ -> "!" | RecvA _ -> "?" | _ -> assert false
     in
-    let svars, rec_expr_updates, tv_resets = silent_vars_and_rec_expr_updates_str annot_as in
+    let rec_expr_updates, tv_resets = rec_expr_updates_str annot_as in
     sprintf 
       {|{
 "op": %s,
 "role": %s,
 "label": %s,
 "payloads": [%s],
-"silents": [%s],
 "rec_expr_updates": {%s},
 "tv_resets": [%s]
 }|} 
@@ -120,7 +105,6 @@ let show_action =
       (encase @@ RoleName.user r)
       (encase @@ LabelName.user msg.label)
       (String.concat ~sep:",\n" (List.folding_map ~init:1 ~f:payloads_str msg.payload))
-      (svars)
       (rec_expr_updates)
       (tv_resets)
 
@@ -178,18 +162,14 @@ type efsm_conv_env =
   ; states_to_merge: (int * int) list
   ; active_roles: (RoleName.t, RoleName.comparator_witness) Set.t
   ; role_activations: (RoleName.t * RoleName.t * (message * int)) list 
-  ; tv_to_rec_var: (bool * Gtype.rec_var) list Map.M(TypeVariableName).t
-  ; silent_var_buffer: (VariableName.t * Expr.payload_type) list 
-  ; svars: (VariableName.t, VariableName.comparator_witness) Set.t }
+  ; tv_to_rec_var: (bool * Gtype.rec_var) list Map.M(TypeVariableName).t }
 let init_efsm_conv_env:efsm_conv_env = 
   { g= G.empty
   ; tyvars= []
   ; states_to_merge= []
   ; active_roles= Set.empty (module RoleName)
   ; role_activations= [] 
-  ; tv_to_rec_var= Map.empty (module TypeVariableName)
-  ; silent_var_buffer= []
-  ; svars= Set.empty (module VariableName) }
+  ; tv_to_rec_var= Map.empty (module TypeVariableName) }
 
 let merge_state ~from_state ~to_state g =
   (* check for vertex ε-transitioning to itself: V --ε--> V *)
@@ -226,7 +206,6 @@ let merge_state ~from_state ~to_state g =
 (* and applys an annotation to the current message for it *)
 let make_refinement_annotation role env next_l =
   if Config.refinement_type_enabled () then
-    let silent_vars = env.silent_var_buffer in
     let tv_resets = ref [] in
     let rec aux = (function
     | ChoiceG (selector, ls) ->
@@ -240,14 +219,7 @@ let make_refinement_annotation role env next_l =
       let (_, prev_tvs) = List.Assoc.find_exn ~equal:TypeVariableName.equal env.tyvars tv in
       let prev_tvs = Set.of_list (module TypeVariableName) prev_tvs in
       tv_resets := Set.to_list @@ Set.diff curr_tvs prev_tvs
-      ; let check_expr silent_vars e =
-        let free_vars = Expr.free_var e in
-        let unknown_vars = Set.inter free_vars silent_vars in
-        if not @@ Set.is_empty unknown_vars then
-          uerr
-            (UnknownVariableValue (role, Set.choose_exn unknown_vars))
-      in
-      let rec_expr_filter = Map.find_exn env.tv_to_rec_var tv in
+      ; let rec_expr_filter = Map.find_exn env.tv_to_rec_var tv in
       let rec_exprs =
         List.map2_exn
           ~f:(fun (x, _) y -> if not x then Some y else None)
@@ -259,9 +231,7 @@ let make_refinement_annotation role env next_l =
           ""
       in
       let rec_exprs = List.filter_opt rec_exprs in
-      List.iter ~f:(check_expr env.svars) rec_exprs
-      ; let rec_exprs = List.map ~f:(fun r -> (rec_expr_name, r)) rec_exprs in
-      rec_exprs
+      List.map ~f:(fun r -> (rec_expr_name, r)) rec_exprs 
     | MessageG (_, s, r, l') ->
       if RoleName.equal role s || RoleName.equal role r then
         []
@@ -271,8 +241,8 @@ let make_refinement_annotation role env next_l =
       [])
     in
     let rec_expr_updates = aux next_l in
-    ({env with silent_var_buffer= []}, {silent_vars; rec_expr_updates; tv_resets= !tv_resets})
-  else (env, {silent_vars= []; rec_expr_updates= []; tv_resets= []})
+    (env, {rec_expr_updates; tv_resets= !tv_resets})
+  else (env, {rec_expr_updates= []; tv_resets= []})
 
 let first_msg_is_distinct_and_from_chooser chooser ar ras =
   let label_equals (pl1, lab1) (pl2, lab2) = (* should this check payloads too?? *)
@@ -365,22 +335,7 @@ let of_global_type gty ~role ~server =
         ({env with g}, curr)
       | _ ->
         let role_activations = role_activations @ [(send_n, recv_n, (m, !count))] in
-        let named_payloads =
-          List.rev_filter_map
-            ~f:(function
-              | PValue (Some var, t) -> Some (var, t) | _ -> None )
-            m.payload
-        in
-        if List.is_empty named_payloads || (not @@ Config.refinement_type_enabled ()) then 
-          conv_gtype_aux {env with active_roles; role_activations} l
-        else
-          let svars =
-            List.fold ~init:env.svars
-              ~f:(fun acc (var, _) -> Set.add acc var)
-              named_payloads
-          in
-          let silent_var_buffer = env.silent_var_buffer @ named_payloads in
-          conv_gtype_aux {env with active_roles; role_activations; silent_var_buffer; svars} l
+        conv_gtype_aux {env with active_roles; role_activations} l
     )
     | MuG (tv, rec_vars, l) ->
       let rec_vars =

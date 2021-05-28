@@ -418,7 +418,7 @@ let validate_refinements_exn t =
   in
   let encode_progress_clause env payloads =
     let e =
-      List.fold ~init:(Sexp.Atom "true")
+      List.fold ~init:(Expr.Sexp.Atom "true")
         ~f:
           (fun e -> function
             | PValue (None, _) -> e
@@ -428,25 +428,29 @@ let validate_refinements_exn t =
                   match ty with
                   | Expr.PTRefined (v_, _, refinement) ->
                       if VariableName.equal v v_ then
-                        Sexp.List
-                          [Sexp.Atom "and"; Expr.sexp_of_expr refinement; e]
+                        Expr.Sexp.List
+                          [ Expr.Sexp.Atom "and"
+                          ; Expr.sexp_of_expr refinement
+                          ; e ]
                       else
                         Err.violationf
                           "TODO: Handle the case where refinement and \
                            payload variables are different"
                   | _ -> e
                 in
-                Sexp.List
-                  [ Sexp.Atom "exists"
-                  ; Sexp.List
-                      [ Sexp.List
-                          [Sexp.Atom (VariableName.user v); Sexp.Atom sort]
-                      ]
+                Expr.Sexp.List
+                  [ Expr.Sexp.Atom "exists"
+                  ; Expr.Sexp.List
+                      [ Expr.Sexp.List
+                          [ Expr.Sexp.Atom (VariableName.user v)
+                          ; Expr.Sexp.Atom sort ] ]
                   ; e ]
             | PDelegate _ -> (* Not supported *) e )
         payloads
     in
-    let env = Expr.add_assert_s_expr (Sexp.List [Sexp.Atom "not"; e]) env in
+    let env =
+      Expr.add_assert_s_expr (Expr.Sexp.List [Expr.Sexp.Atom "not"; e]) env
+    in
     env
   in
   let ensure_progress env gs =

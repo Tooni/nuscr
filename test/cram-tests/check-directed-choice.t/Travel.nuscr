@@ -1,0 +1,25 @@
+(*# CheckDirectedChoiceDisabled #*)
+
+global protocol Travel(role C, role A, role S) {
+  do Nego(C, A, S);
+}
+
+aux global protocol Nego(role C, role A, role S) {
+  choice at C {
+    query(s: string) from C to A;
+    quote(x: int) from A to C;
+    do Nego(C, A, S);
+  } or {
+    do Pay(C, A, S);
+  }
+}
+
+aux global protocol Pay(role C, role A, role S) {
+  choice at C {
+    pay(string) from C to S;
+    confirm(int) from S to C;
+    accpt(int) from C to A;
+  } or {
+    reject() from C to A;
+  }
+}

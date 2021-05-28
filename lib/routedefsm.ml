@@ -402,8 +402,8 @@ let of_global_type gty ~role ~server =
       in
 
       let first_msg_is_distinct_and_from_chooser = fun ar ras ->
-        let label_equals (pl1, lab1) (pl2, lab2) = 
-          List.length pl1 = List.length pl2 && 
+        let label_equals (pl1, lab1) (pl2, lab2) = (* should this check payloads too?? *)
+          List.length pl1 = List.length pl2 &&
             List.for_all2_exn pl1 pl2 ~f:Gtype.equal_payload &&
             LabelName.equal lab1 lab2
         in

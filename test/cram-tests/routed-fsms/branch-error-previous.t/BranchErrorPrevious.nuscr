@@ -1,0 +1,12 @@
+(*# CheckDirectedChoiceDisabled #*)
+
+global protocol BranchErrorPrevious(role C, role A, role S) {
+    a() from C to A;
+    a() from C to S;
+    choice at C {
+        b() from C to A;
+        b() from C to S;
+    } or {
+        c() from C to A;
+    }
+}

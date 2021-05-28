@@ -39,6 +39,14 @@ let main file enumerate verbose go_path out_dir project fsm routed_fsm gencode_o
   try
     let ast = process_file file Lib.parse in
     Config.load_from_pragmas ast.pragmas ;
+    if Option.is_some project && Config.check_directed_choice_disabled () then
+      Err.uerr
+      (Err.IncompatibleFlag
+         ("project", Syntax.show_pragma Syntax.CheckDirectedChoiceDisabled) ) ;
+    if Option.is_some fsm && Config.check_directed_choice_disabled () then
+      Err.uerr
+      (Err.IncompatibleFlag
+          ("fsm", Syntax.show_pragma Syntax.CheckDirectedChoiceDisabled) ) ;
     if Option.is_some fsm && Config.nested_protocol_enabled () then
       Err.uerr
         (Err.IncompatibleFlag

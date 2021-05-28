@@ -1,0 +1,25 @@
+(*# CheckDirectedChoiceDisabled, RefinementTypes, ValidateRefinementProgress, ValidateRefinementSatisfiability #*)
+
+global protocol OnlineWallet(role Wallet, role Customer, role Vendor) {
+  rec AuthLoop [try<Customer, Wallet>: int = 0] {
+    login(account: int{account >= 100000 && account < 1000000}) from Customer to Wallet;
+    pin(pin: int{pin >= 1000 && pin < 10000}) from Customer to Wallet;
+    choice at Wallet {
+      login_ok() from Wallet to Customer;
+      login_ok() from Wallet to Vendor;
+      request(bill: int{bill < 0}) from Vendor to Customer;
+      choice at Customer {
+        authorise() from Customer to Wallet;
+        pay(payment: int{payment = bill}) from Customer to Vendor;
+      } or {
+        reject() from Customer to Wallet;
+        reject() from Customer to Vendor;
+      }
+    } or {
+      login_retry(msg: string{try < 3}) from Wallet to Customer;
+      continue AuthLoop [try + 1];
+    } or {
+      login_denied(msg: string{try = 3}) from Wallet to Customer;
+    }
+  }
+}

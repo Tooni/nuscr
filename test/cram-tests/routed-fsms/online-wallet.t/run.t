@@ -33,92 +33,20 @@ Generate FSM for OnlineWallet protocol, for Customer role.
   "try": {"typevar": "AuthLoop", "sort": "number", "refinement": "", "init": "0"}
   }, 
   "edges": {
-  "l89": {
+  "l12": {
   "op": "!",
-  "role": "Vendor",
-  "label": "pay",
+  "role": "Wallet",
+  "label": "login",
   "payloads": [{
-  "name": "payment",
+  "name": "account",
   "sort": "number",
-  "refinement": {"binop": "=",
-  "e1": "payment",
-  "e2": "bill"}
-  }],
-  "rec_expr_updates": {},
-  "tv_resets": []
-  },
-  "l78": {
-  "op": "!",
-  "role": "Wallet",
-  "label": "authorise",
-  "payloads": [],
-  "rec_expr_updates": {},
-  "tv_resets": []
-  },
-  "l119": {
-  "op": "!",
-  "role": "Vendor",
-  "label": "reject",
-  "payloads": [],
-  "rec_expr_updates": {},
-  "tv_resets": []
-  },
-  "l1011": {
-  "op": "!",
-  "role": "Wallet",
-  "label": "reject",
-  "payloads": [],
-  "rec_expr_updates": {},
-  "tv_resets": []
-  },
-  "l56": {
-  "op": "?",
-  "role": "Vendor",
-  "label": "request",
-  "payloads": [{
-  "name": "bill",
-  "sort": "number",
-  "refinement": {"binop": "<",
-  "e1": "bill",
-  "e2": "0"}
-  }],
-  "rec_expr_updates": {},
-  "tv_resets": []
-  },
-  "l45": {
-  "op": "?",
-  "role": "Wallet",
-  "label": "login_ok",
-  "payloads": [],
-  "rec_expr_updates": {},
-  "tv_resets": []
-  },
-  "l120": {
-  "op": "?",
-  "role": "Wallet",
-  "label": "login_retry",
-  "payloads": [{
-  "name": "msg",
-  "sort": "string",
-  "refinement": {"binop": "<",
-  "e1": "try",
-  "e2": "3"}
-  }],
-  "rec_expr_updates": {"try": {"binop": "+",
-  "e1": "try",
-  "e2": "1"}},
-  "tv_resets": []
-  },
-  "l139": {
-  "op": "?",
-  "role": "Wallet",
-  "label": "login_denied",
-  "payloads": [{
-  "name": "msg",
-  "sort": "string",
-  "refinement": {"binop": "=",
-  "e1": "try",
-  "e2": "3"}
+  "refinement": {"binop": "&&",
+  "e1": {"binop": ">=",
+  "e1": "account",
+  "e2": "100000"},
+  "e2": {"binop": "<",
+  "e1": "account",
+  "e2": "1000000"}}
   }],
   "rec_expr_updates": {},
   "tv_resets": []
@@ -141,20 +69,92 @@ Generate FSM for OnlineWallet protocol, for Customer role.
   "rec_expr_updates": {},
   "tv_resets": []
   },
-  "l12": {
+  "l139": {
+  "op": "?",
+  "role": "Wallet",
+  "label": "login_denied",
+  "payloads": [{
+  "name": "msg",
+  "sort": "string",
+  "refinement": {"binop": "=",
+  "e1": "try",
+  "e2": "3"}
+  }],
+  "rec_expr_updates": {},
+  "tv_resets": []
+  },
+  "l120": {
+  "op": "?",
+  "role": "Wallet",
+  "label": "login_retry",
+  "payloads": [{
+  "name": "msg",
+  "sort": "string",
+  "refinement": {"binop": "<",
+  "e1": "try",
+  "e2": "3"}
+  }],
+  "rec_expr_updates": {"try": {"binop": "+",
+  "e1": "try",
+  "e2": "1"}},
+  "tv_resets": []
+  },
+  "l45": {
+  "op": "?",
+  "role": "Wallet",
+  "label": "login_ok",
+  "payloads": [],
+  "rec_expr_updates": {},
+  "tv_resets": []
+  },
+  "l56": {
+  "op": "?",
+  "role": "Vendor",
+  "label": "request",
+  "payloads": [{
+  "name": "bill",
+  "sort": "number",
+  "refinement": {"binop": "<",
+  "e1": "bill",
+  "e2": "0"}
+  }],
+  "rec_expr_updates": {},
+  "tv_resets": []
+  },
+  "l1011": {
   "op": "!",
   "role": "Wallet",
-  "label": "login",
+  "label": "reject",
+  "payloads": [],
+  "rec_expr_updates": {},
+  "tv_resets": []
+  },
+  "l119": {
+  "op": "!",
+  "role": "Vendor",
+  "label": "reject",
+  "payloads": [],
+  "rec_expr_updates": {},
+  "tv_resets": []
+  },
+  "l78": {
+  "op": "!",
+  "role": "Wallet",
+  "label": "authorise",
+  "payloads": [],
+  "rec_expr_updates": {},
+  "tv_resets": []
+  },
+  "l89": {
+  "op": "!",
+  "role": "Vendor",
+  "label": "pay",
   "payloads": [{
-  "name": "account",
+  "name": "payment",
   "sort": "number",
-  "refinement": {"binop": "&&",
-  "e1": {"binop": ">=",
-  "e1": "account",
-  "e2": "100000"},
-  "e2": {"binop": "<",
-  "e1": "account",
-  "e2": "1000000"}}
+  "refinement": {"binop": "=",
+  "e1": "payment",
+  "e2": "bill"}
   }],
   "rec_expr_updates": {},
   "tv_resets": []

@@ -26,10 +26,42 @@ Generate FSM for Travel protocol, for role C.
   
   }, 
   "edges": {
-  "l30": {
-  "op": "?",
+  "l98": {
+  "op": "!",
   "role": "A",
-  "label": "quote",
+  "label": "reject",
+  "payloads": [],
+  "rec_expr_updates": {},
+  "tv_resets": []
+  },
+  "l56": {
+  "op": "!",
+  "role": "S",
+  "label": "pay",
+  "payloads": [{
+  "name": "payload_1",
+  "sort": "string",
+  "refinement": ""
+  }],
+  "rec_expr_updates": {},
+  "tv_resets": []
+  },
+  "l67": {
+  "op": "?",
+  "role": "S",
+  "label": "confirm",
+  "payloads": [{
+  "name": "payload_1",
+  "sort": "number",
+  "refinement": ""
+  }],
+  "rec_expr_updates": {},
+  "tv_resets": []
+  },
+  "l78": {
+  "op": "!",
+  "role": "A",
+  "label": "accpt",
   "payloads": [{
   "name": "payload_1",
   "sort": "number",
@@ -50,47 +82,15 @@ Generate FSM for Travel protocol, for role C.
   "rec_expr_updates": {},
   "tv_resets": []
   },
-  "l78": {
-  "op": "!",
-  "role": "A",
-  "label": "accpt",
-  "payloads": [{
-  "name": "payload_1",
-  "sort": "number",
-  "refinement": ""
-  }],
-  "rec_expr_updates": {},
-  "tv_resets": []
-  },
-  "l67": {
+  "l30": {
   "op": "?",
-  "role": "S",
-  "label": "confirm",
+  "role": "A",
+  "label": "quote",
   "payloads": [{
   "name": "payload_1",
   "sort": "number",
   "refinement": ""
   }],
-  "rec_expr_updates": {},
-  "tv_resets": []
-  },
-  "l56": {
-  "op": "!",
-  "role": "S",
-  "label": "pay",
-  "payloads": [{
-  "name": "payload_1",
-  "sort": "string",
-  "refinement": ""
-  }],
-  "rec_expr_updates": {},
-  "tv_resets": []
-  },
-  "l98": {
-  "op": "!",
-  "role": "A",
-  "label": "reject",
-  "payloads": [],
   "rec_expr_updates": {},
   "tv_resets": []
   }

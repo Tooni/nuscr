@@ -459,6 +459,7 @@ let of_global_type gty ~role ~server =
       (* don't do epsilon transition if next state is terminal *)
       (* this is for when a role is used (and becomes active) in one branch but not in another *)
       let non_terminal_nexts = List.filter ~f:(fun next -> next <> !terminal) nexts in
+      let non_terminal_nexts = List.dedup_and_sort ~compare:Int.compare non_terminal_nexts in
       let es = List.map ~f:(fun n -> (curr, EpsilonRef, n)) non_terminal_nexts in
 
       let g = G.add_vertex g curr in

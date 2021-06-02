@@ -262,12 +262,6 @@ let first_msg_is_distinct_and_from_chooser chooser ar ras =
         ; RoleName.equal s chooser && is_distinct_msg
       | None -> false)
 
-let role_does_nothing_in_all_branches server ar ras =
-  not @@ RoleName.equal ar server && (* server can't do nothing as it must get informed of the choice *)
-  List.for_all ras ~f:(fun se -> 
-    not @@ List.exists se ~f:(fun (s, r, _) ->
-      RoleName.equal s ar || RoleName.equal r ar))
-
 (* ordered flattening *)
 (* e.g. [[1,2,3,4],[a,b,c]] --> [1,a,2,b,3,c,4] *)
 (* to make nested choices not cause outermost choice's branch check to fail *)
@@ -441,8 +435,7 @@ let of_global_type gty ~role ~server =
       (* check over previous active roles *)
       Set.iter active_roles 
         ~f:(fun ar -> 
-          if not @@ first_msg_is_distinct_and_from_chooser chooser ar !choice_r_activations
-            && not @@ role_does_nothing_in_all_branches server ar !choice_r_activations then
+          if not @@ first_msg_is_distinct_and_from_chooser chooser ar !choice_r_activations then
               uerr (BranchErrorPrevious (chooser, ar))
           )
                                                  

@@ -439,15 +439,24 @@ let of_global_type gty ~role ~server =
               uerr (BranchErrorPrevious (chooser, ar))
           )
                                                  
-      ; let new_rs = List.map ~f:(fun l_rs -> Set.diff l_rs active_roles) !choice_active_rs in
-      optional_active_roles := Set.union !optional_active_roles (Set.union_list (module RoleName) new_rs)
+      ; let new_r_sets = List.map ~f:(fun l_rs -> Set.diff l_rs active_roles) !choice_active_rs in
+      optional_active_roles := Set.union !optional_active_roles (Set.union_list (module RoleName) new_r_sets)
       (* check over newly active roles *)
-      ; let ars_and_ras = List.zip_exn new_rs !choice_r_activations in
-      List.iter ~f:(fun (ars, ras) ->
-        if not @@ Set.for_all ~f:(fun r -> first_msg_is_distinct_and_from_chooser chooser r [ras]) ars then
-            uerr (BranchErrorNew (chooser, Set.to_list ars))
-        ) ars_and_ras ;
-      let g = env.g in
+      ; List.iter new_r_sets ~f:(fun new_rs ->
+        Set.iter new_rs ~f:(fun new_r -> 
+          (*(Caml.Format.print_string (RoleName.user new_r) );*)
+          let contains_new_r = List.exists ~f:(fun (s, r, _) -> RoleName.equal r new_r || RoleName.equal s new_r) in
+          let filtered_branches = List.filter ~f:contains_new_r !choice_r_activations in
+          (*(Caml.Format.print_string 
+            ("\n" ^ String.concat ~sep:"\n" 
+              (List.map filtered_branches
+                ~f:(fun cra -> String.concat ~sep:"," (List.map ~f:(fun (s, r, _) -> RoleName.user s ^ "--" ^ RoleName.user r) cra))) ^ "\n")) ;*)
+          if not @@ first_msg_is_distinct_and_from_chooser chooser new_r filtered_branches then
+            uerr (BranchErrorNew (chooser, [new_r]))
+        )
+      )
+      
+      ; let g = env.g in
 
       (* don't do epsilon transition if next state is terminal *)
       (* this is for when a role is used (and becomes active) in one branch but not in another *)

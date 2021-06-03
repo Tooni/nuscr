@@ -49,7 +49,7 @@ let show_user_error = function
       "When branches of a choice update a recursion expression. Each branch must update it in the same way. "
       ^ "Failed for choice-maker " ^ RoleName.user rc
   | BranchErrorPrevious (rc, r) -> 
-      "In a choice, each previously active role must be present in either none or all of the branches. "
+      "In a choice, each previously active role must be present in all of the branches. "
       ^ "In the latter case, the first message the role receives must be distinct and from the selector. "
       ^ "Detected for selector " ^ RoleName.user rc ^ " and previously active role " ^ RoleName.user r
   | BranchErrorNew (rc, rs) -> 

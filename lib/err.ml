@@ -55,7 +55,7 @@ let show_user_error = function
   | BranchErrorNew (rc, r) -> 
       "In a choice, each newly active role must receive a distinct message from the selector. "
       ^ "Violation detected for selector " ^ RoleName.user rc ^ ", " 
-      ^ "in the branch that activates role: " ^ RoleName.user r
+      ^ "in the branch that activates role " ^ RoleName.user r
   | ChorAutomataNotWellSequencedDueToNonDisjointParticipants -> "Choreography automaton's sub-automata's sets of participants are not disjoint"
   | ChorAutomataNotWellSequencedOverRecursion tvar -> "Not well-sequenced over recursive variable " ^ TypeVariableName.user tvar
   | UnknownPragma prg -> "Unknown pragma: " ^ prg

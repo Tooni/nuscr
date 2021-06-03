@@ -447,7 +447,7 @@ let of_global_type gty ~role ~server =
           let contains_new_r = List.exists ~f:(fun (s, r, _) -> RoleName.equal r new_r || RoleName.equal s new_r) in
           let filtered_branches = List.filter ~f:contains_new_r !choice_r_activations in
           if not @@ first_msg_is_distinct_and_from_chooser chooser new_r filtered_branches then
-            uerr (BranchErrorNew (chooser, [new_r]))
+            uerr (BranchErrorNew (chooser, new_r))
         )
       )
       

@@ -5,7 +5,7 @@ open Names
 type user_error =
   | RecExpressionUpdatesNonUniform of RoleName.t
   | BranchErrorPrevious of RoleName.t * RoleName.t
-  | BranchErrorNew of RoleName.t * (RoleName.t list)
+  | BranchErrorNew of RoleName.t * RoleName.t
   | ChorAutomataNotWellSequencedDueToNonDisjointParticipants
   | ChorAutomataNotWellSequencedOverRecursion of TypeVariableName.t
   | UnknownPragma of string
@@ -52,11 +52,10 @@ let show_user_error = function
       "In a choice, each previously active role must be present in all of the branches. "
       ^ "In the latter case, the first message the role receives must be distinct and from the selector. "
       ^ "Detected for selector " ^ RoleName.user rc ^ " and previously active role " ^ RoleName.user r
-  | BranchErrorNew (rc, rs) -> 
-      let err_role_list = String.concat ~sep:", " @@ List.map ~f:RoleName.user rs in
+  | BranchErrorNew (rc, r) -> 
       "In a choice, each newly active role must receive a distinct message from the selector. "
       ^ "Violation detected for selector " ^ RoleName.user rc ^ ", " 
-      ^ "in the branch that activates role(s): " ^ err_role_list
+      ^ "in the branch that activates role: " ^ RoleName.user r
   | ChorAutomataNotWellSequencedDueToNonDisjointParticipants -> "Choreography automaton's sub-automata's sets of participants are not disjoint"
   | ChorAutomataNotWellSequencedOverRecursion tvar -> "Not well-sequenced over recursive variable " ^ TypeVariableName.user tvar
   | UnknownPragma prg -> "Unknown pragma: " ^ prg

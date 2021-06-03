@@ -444,13 +444,8 @@ let of_global_type gty ~role ~server =
       (* check over newly active roles *)
       ; List.iter new_r_sets ~f:(fun new_rs ->
         Set.iter new_rs ~f:(fun new_r -> 
-          (*(Caml.Format.print_string (RoleName.user new_r) );*)
           let contains_new_r = List.exists ~f:(fun (s, r, _) -> RoleName.equal r new_r || RoleName.equal s new_r) in
           let filtered_branches = List.filter ~f:contains_new_r !choice_r_activations in
-          (*(Caml.Format.print_string 
-            ("\n" ^ String.concat ~sep:"\n" 
-              (List.map filtered_branches
-                ~f:(fun cra -> String.concat ~sep:"," (List.map ~f:(fun (s, r, _) -> RoleName.user s ^ "--" ^ RoleName.user r) cra))) ^ "\n")) ;*)
           if not @@ first_msg_is_distinct_and_from_chooser chooser new_r filtered_branches then
             uerr (BranchErrorNew (chooser, [new_r]))
         )

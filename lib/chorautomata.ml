@@ -234,10 +234,10 @@ let of_global_type gty =
       let roles_union = Set.union_list (module RoleName) role_sets in
       let cardinality_of_union = Set.length roles_union in
       let role_set_lengths = List.map role_sets ~f:Set.length in
-      let sum_of_cardinalities = List.reduce_exn role_set_lengths ~f:(+) in
-      Int.equal sum_of_cardinalities cardinality_of_union
+      let sum_cardinalities = List.reduce_exn role_set_lengths ~f:(+) in
+      Int.equal sum_cardinalities cardinality_of_union
     in
-    if chor_automata_have_disjoint_participants then
+    if not chor_automata_have_disjoint_participants then
       ()
       (*(Caml.Format.print_string "\nTHIS CHOREOGRAPHY AUTOMATON'S SUB-AUTOMATA HAVE DISJOINT PARTICIPANTS\n\n")*)
     else 

@@ -121,8 +121,6 @@ let of_global_type gty =
     | EndG ->
       env
     | MessageG (m, send_n, recv_n, l) ->
-      (*let prev_str (start_id, c, (s, r)) = "(" ^ Int.to_string start_id ^ "," ^ Int.to_string c ^ " , " ^ RoleName.user s ^ "," ^ RoleName.user r ^ ")" in 
-      let prevs_str prevs = "\n" ^ String.concat ~sep:"__" (List.map ~f:prev_str prevs) ^ "\n" in*)
       let a = MsgA (send_n, m, recv_n) in
       let (prev, curr, prevs) = 
         let prev_search = List.find prevs ~f:(fun (_, _, (s, r)) -> RoleName.equal send_n s || RoleName.equal send_n r) in
@@ -148,7 +146,6 @@ let of_global_type gty =
             let new_prevs = prevs @ [new_prev] in
             (prev, curr', new_prevs))
       in
-      (*(Caml.Format.print_string (prevs_str prevs)) ;*)
       let e = (prev, a, curr) in
       let g = G.add_vertex g curr in
       let g = G.add_edge_e g e in
@@ -238,14 +235,9 @@ let of_global_type gty =
       Int.equal sum_cardinalities cardinality_of_union
     in
     if not chor_automata_have_disjoint_participants then
-      ()
-      (*(Caml.Format.print_string "\nTHIS CHOREOGRAPHY AUTOMATON'S SUB-AUTOMATA HAVE DISJOINT PARTICIPANTS\n\n")*)
-    else 
-      (*(Caml.Format.print_string (show g ^ "\n\n")*)
       uerr ChorAutomataNotWellSequencedDueToNonDisjointParticipants
     ; if not @@ List.is_empty env.states_to_merge then
       let rec aux (start, g) = function
-        (*| [] -> (Caml.Format.print_string (show g ^ "\n\n") ; g)*)
         | [] -> g
         | (s1, s2) :: rest ->
             let to_state = Int.min s1 s2 in
@@ -264,5 +256,5 @@ let of_global_type gty =
             aux (start, g) rest
       in
       aux (0, g) env.states_to_merge
-    else (*(Caml.Format.print_string (show g ^ "\n\n") ;*) g
+    else g
     

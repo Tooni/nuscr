@@ -20,8 +20,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install z3 m4 -y
-          z3 --version
-          which z3
 
       - name: Use OCaml 4.11.1
         uses: avsm/setup-ocaml@v1

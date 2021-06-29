@@ -1,9 +1,0 @@
-(*# CheckDirectedChoiceDisabled #*)
-
-global protocol NonUniqueBranchStarts(role C, role A) {
-    choice at C {
-        m() from C to A;
-    } or {
-        m() from C to A;
-    }
-}

@@ -19,7 +19,7 @@ let process_file (fn : string) (proc : string -> In_channel.t -> 'a) : 'a =
   let res = proc fn input in
   In_channel.close input ; res
 
-let gen_output_for_routed_fsm ast f = function
+let gen_output_for_chor_automata ast f = function
   | Some (role, server, protocol) ->
       let res = f ast protocol role server in
       print_endline res
@@ -31,30 +31,30 @@ let gen_output ast f = function
       print_endline res
   | _ -> ()
 
-let main file enumerate verbose go_path out_dir project fsm routed_fsm gencode_ocaml
+let main file enumerate verbose go_path out_dir project fsm chor_automata gencode_ocaml
     gencode_monadic_ocaml gencode_go gencode_fstar sexp_global_type
     show_solver_queries =
-  Config.set_solver_show_queries show_solver_queries ;
-  Config.set_verbose verbose ;
+  Pragma.set_solver_show_queries show_solver_queries ;
+  Pragma.set_verbose verbose ;
   try
-    let ast = process_file file Lib.parse in
-    Config.load_from_pragmas ast.pragmas ;
-    if Option.is_some project && Config.check_directed_choice_disabled () then
+    let ast = process_file file Nuscrlib.parse in
+    Pragma.load_from_pragmas ast.pragmas ;
+    if Option.is_some project && Pragma.check_directed_choice_disabled () then
       Err.uerr
       (Err.IncompatibleFlag
-         ("project", Syntax.show_pragma Syntax.CheckDirectedChoiceDisabled) ) ;
-    if Option.is_some fsm && Config.check_directed_choice_disabled () then
+         ("project", Pragma.show_pragma CheckDirectedChoiceDisabled) ) ;
+    if Option.is_some fsm && Pragma.check_directed_choice_disabled () then
       Err.uerr
       (Err.IncompatibleFlag
-          ("fsm", Syntax.show_pragma Syntax.CheckDirectedChoiceDisabled) ) ;
-    if Option.is_some fsm && Config.nested_protocol_enabled () then
+          ("fsm", Pragma.show_pragma CheckDirectedChoiceDisabled) ) ;
+    if Option.is_some fsm && Pragma.nested_protocol_enabled () then
       Err.uerr
         (Err.IncompatibleFlag
-           ("fsm", Syntax.show_pragma Syntax.NestedProtocols) ) ;
-    Lib.validate_exn ast ;
+           ("fsm", Pragma.show_pragma Pragma.NestedProtocols) ) ;
+    Nuscrlib.validate_exn ast ;
     let () =
       if enumerate then
-        Lib.enumerate ast
+        Nuscrlib.enumerate ast
         |> List.map ~f:(fun (n, r) ->
                RoleName.user r ^ "@" ^ ProtocolName.user n )
         |> String.concat ~sep:"\n" |> print_endline
@@ -62,41 +62,41 @@ let main file enumerate verbose go_path out_dir project fsm routed_fsm gencode_o
     let () =
       gen_output ast
         (fun ast protocol role ->
-          Lib.project_role ast ~protocol ~role |> Ltype.show )
+          Nuscrlib.project_role ast ~protocol ~role |> Ltype.show )
         project
     in
     let () =
       gen_output ast
         (fun ast protocol role ->
-          Lib.generate_fsm ast ~protocol ~role |> snd |> Efsm.show )
+          Nuscrlib.generate_fsm ast ~protocol ~role |> snd |> Efsm.show )
         fsm
     in
     let () =
-      gen_output_for_routed_fsm ast
+      gen_output_for_chor_automata ast
         (fun ast protocol role server ->
-          let ((_, g), json) = Lib.generate_routed_fsm ast ~protocol ~role ~server in
-          Routedefsm.show g ^ "\njson:" ^ json
+          Nuscrlib.generate_chor_automata ast ~protocol ~role ~server |> snd |> Chorautomata.show 
           )
-          routed_fsm
+          chor_automata
     in
     let () =
       Option.iter
         ~f:(fun (role, protocol) ->
-          Lib.generate_ocaml_code ~monad:false ast ~protocol ~role
+          Nuscrlib.generate_ocaml_code ~monad:false ast ~protocol ~role
           |> print_endline )
         gencode_ocaml
     in
     let () =
       Option.iter
         ~f:(fun (role, protocol) ->
-          Lib.generate_ocaml_code ~monad:true ast ~protocol ~role
+          Nuscrlib.generate_ocaml_code ~monad:true ast ~protocol ~role
           |> print_endline )
         gencode_monadic_ocaml
     in
     let () =
       Option.iter
         ~f:(fun (role, protocol) ->
-          Lib.generate_fstar_code ast ~protocol ~role |> print_endline )
+          Nuscrlib.generate_fstar_code ast ~protocol ~role |> print_endline
+          )
         gencode_fstar
     in
     let () =
@@ -105,7 +105,7 @@ let main file enumerate verbose go_path out_dir project fsm routed_fsm gencode_o
           match out_dir with
           | Some out_dir ->
               let impl =
-                Lib.generate_go_code ast ~protocol ~out_dir ~go_path
+                Nuscrlib.generate_go_code ast ~protocol ~out_dir ~go_path
               in
               print_endline impl
           | None ->
@@ -121,7 +121,7 @@ let main file enumerate verbose go_path out_dir project fsm routed_fsm gencode_o
       Option.iter
         ~f:(fun protocol ->
           let protocol = ProtocolName.of_string protocol in
-          Lib.generate_sexp ast ~protocol |> print_endline )
+          Nuscrlib.generate_sexp ast ~protocol |> print_endline )
         sexp_global_type
     in
     `Ok ()
@@ -135,7 +135,7 @@ let main file enumerate verbose go_path out_dir project fsm routed_fsm gencode_o
         , "I'm sorry, it is unfortunate " ^ desc ^ " is not implemented" )
   | e -> `Error (false, "Reported problem:\n " ^ Exn.to_string e)
 
-let routed_fsm_role_proto =
+let chor_automata_role_proto =
   let parse input =
     match String.split input ~on:'@' with
     | [role; server; protocol] ->
@@ -201,13 +201,13 @@ let fsm =
   Arg.(
     value & opt (some role_proto) None & info ["fsm"] ~doc ~docv:"ROLE@PROTO")
 
-let routed_fsm =
+let chor_automata =
   let doc =
-    "Generate the routed CFSM from the Scribble protocol \
+    "Generate the choreography automata from the Scribble protocol \
       <role_name>@<server_name>@<protocol_name>"
   in
   Arg.(
-    value & opt (some routed_fsm_role_proto) None & info ["routed_fsm"] ~doc ~docv:"ROLE@SERVER@PROTO")
+    value & opt (some chor_automata_role_proto) None & info ["chor_automata"] ~doc ~docv:"ROLE@SERVER@PROTO")
 
 let gencode_ocaml =
   let doc =
@@ -290,7 +290,7 @@ let cmd =
   ( Term.(
       ret
         ( const main $ file $ enumerate $ verbose $ go_path $ out_dir
-        $ project $ fsm $ routed_fsm $ gencode_ocaml $ gencode_monadic_ocaml $ gencode_go
+        $ project $ fsm $ chor_automata $ gencode_ocaml $ gencode_monadic_ocaml $ gencode_go
         $ gencode_fstar $ sexp_global_type $ show_solver_queries ))
   , Term.info "nuscr" ~version:"%%VERSION%%" ~doc ~exits:Term.default_exits
       ~man )

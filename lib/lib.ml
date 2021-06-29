@@ -1,9 +1,11 @@
 open! Base
 open! Stdio
 open Loc
+open Syntaxtree
 open Syntax
 open Err
 open Names
+open Mpst
 
 let set_filename (fname : string) (lexbuf : Lexing.lexbuf) =
   lexbuf.Lexing.lex_curr_p <-
@@ -11,7 +13,7 @@ let set_filename (fname : string) (lexbuf : Lexing.lexbuf) =
   lexbuf
 
 let parse_from_lexbuf lexbuf : scr_module =
-  try Parser.doc Lexer.token lexbuf with
+  try Syntaxtree.Parser.doc Lexer.token lexbuf with
   | Lexer.LexError msg -> uerr (LexerError msg)
   | Parser.Error ->
       let err_interval =
@@ -30,7 +32,7 @@ let parse_string string = parse_from_lexbuf @@ Lexing.from_string string
 let validate_protocols_exn (ast : scr_module) : unit =
   let show ~f ?(sep = "\n") xs =
     (* only show if verbose is on *)
-    if Config.verbose () then
+    if Pragma.verbose () then
       String.concat ~sep (List.map ~f xs) |> print_endline
     else ()
   in
@@ -45,9 +47,9 @@ let validate_protocols_exn (ast : scr_module) : unit =
   (* let g_types = List.map ~f:(fun (g, roles) -> (Gtype.normalise g, roles))
      g_types in *)
   show ~f:(fun (g, _) -> Gtype.show g) g_types ;
-  if Config.refinement_type_enabled () then
+  if Pragma.refinement_type_enabled () then
     List.iter ~f:(fun (g, _) -> Gtype.validate_refinements_exn g) g_types ;
-  if not @@ Config.check_directed_choice_disabled () then 
+  if not @@ Pragma.check_directed_choice_disabled () then 
     let l_types =
       List.map
         ~f:(fun (g, roles) ->
@@ -66,7 +68,7 @@ let validate_protocols_exn (ast : scr_module) : unit =
 
 let validate_nested_protocols (ast : scr_module) =
   let show ~f ~sep input =
-    if Config.verbose () then
+    if Pragma.verbose () then
       print_endline (Printf.sprintf "%s%s" (f input) sep)
     else ()
   in
@@ -80,7 +82,7 @@ let validate_nested_protocols (ast : scr_module) =
   ()
 
 let validate_exn (ast : scr_module) : unit =
-  if Config.nested_protocol_enabled () then validate_nested_protocols ast
+  if Pragma.nested_protocol_enabled () then validate_nested_protocols ast
   else (
     Protocol.ensure_no_nested_protocols ast ;
     validate_protocols_exn ast )
@@ -106,7 +108,7 @@ let enumerate_nested_protocols (ast : scr_module) :
   List.concat @@ Map.data enumerated
 
 let enumerate (ast : scr_module) : (ProtocolName.t * RoleName.t) list =
-  if Config.nested_protocol_enabled () then enumerate_nested_protocols ast
+  if Pragma.nested_protocol_enabled () then enumerate_nested_protocols ast
   else enumerate_protocols ast
 
 let get_global_type ast ~protocol : Gtype.t =
@@ -133,7 +135,7 @@ let project_nested_protocol ast ~protocol ~role : Ltype.t =
   l_type
 
 let project_role ast ~protocol ~role : Ltype.t =
-  if Config.nested_protocol_enabled () then
+  if Pragma.nested_protocol_enabled () then
     project_nested_protocol ast ~protocol ~role
   else project_protocol_role ast ~protocol ~role
 
@@ -141,7 +143,9 @@ let generate_fsm ast ~protocol ~role =
   let lt = project_role ast ~protocol ~role in
   Efsm.of_local_type lt
 
-let generate_routed_fsm ast ~protocol ~role ~server =
+let generate_go_code = Codegen.Go.generate_go_code
+
+let generate_chor_automata ast ~protocol ~role ~server =
   let gp =
     match
       List.find
@@ -152,16 +156,14 @@ let generate_routed_fsm ast ~protocol ~role ~server =
     | Some gp -> gp
     | None -> uerr (ProtocolNotFound protocol)
   in
+  let _ = server in
   let gp = Protocol.expand_global_protocol ast gp in
   let gt = Gtype.of_protocol gp in
-  let _ = Chorautomata.of_global_type gt in
-  Routedefsm.of_global_type gt ~role ~server
-
-let generate_go_code = Gocodegen.generate_go_code
+  Chorautomata.of_global_type gt role
 
 let generate_ocaml_code ~monad ast ~protocol ~role =
   let fsm = generate_fsm ast ~protocol ~role in
-  Ocamlcodegen.gen_code ~monad (protocol, role) fsm
+  Codegen.Ocaml.gen_code ~monad (protocol, role) fsm
 
 let generate_sexp ast ~protocol =
   let gp =
@@ -181,9 +183,9 @@ let generate_sexp ast ~protocol =
 
 let generate_ast ~monad ast ~protocol ~role =
   let fsm = generate_fsm ast ~protocol ~role in
-  Ocamlcodegen.gen_ast ~monad (protocol, role) fsm
+  Codegen.Ocaml.gen_ast ~monad (protocol, role) fsm
 
 let generate_fstar_code ast ~protocol ~role =
   let lt = project_role ast ~protocol ~role in
   let efsm = Efsm.of_local_type_with_rec_var_info lt in
-  Fstarcodegen.gen_code efsm
+  Codegen.Fstar.gen_code efsm

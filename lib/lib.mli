@@ -1,6 +1,9 @@
 (** Main entry point of the library *)
 open Names
 
+open Syntaxtree
+open Mpst
+
 (** {1 Parsing} *)
 
 (** This section deals with parsing protocols. *)
@@ -43,12 +46,12 @@ val generate_fsm :
     [(v, g)] where [g] is the graph describing the fsm, and [v] is the root
     index. *)
 
-val generate_routed_fsm :
+val generate_chor_automata :
      Syntax.scr_module
   -> protocol:ProtocolName.t
   -> role:RoleName.t
   -> server:RoleName.t
-  -> (int * Routedefsm.t) * string
+  -> (Chorautomata.state * Chorautomata.t)
 
 val generate_go_code :
      Syntax.scr_module

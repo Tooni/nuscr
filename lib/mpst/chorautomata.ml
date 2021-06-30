@@ -77,20 +77,6 @@ let init_chor_automata_conv_env:chor_automata_conv_env =
   ; tyvars= []
   ; states_to_merge= []}
 
-let rec get_labels = 
-  function 
-  | EndG ->
-    Set.empty (module LabelName)
-  | MessageG (m, _, _, l) ->
-    Set.add (get_labels l) m.label
-  | ChoiceG (_, ls) ->
-    Set.union_list (module LabelName) (List.map ls ~f:get_labels)
-  | MuG (_, _, l) ->
-    get_labels l
-  | TVarG (_, _, _) ->
-    Set.empty (module LabelName)
-  | CallG (_, _, _, l) -> (* unimpl *)
-    get_labels l
 
 let rec extract_pairs =
   function
@@ -98,6 +84,29 @@ let rec extract_pairs =
     []
   | h :: tl ->
     List.map tl ~f:(fun t -> (h, t)) @ extract_pairs tl
+
+let check_labels gt = 
+  let rec get_labels =
+  function 
+  | EndG ->
+    Set.empty (module LabelName)
+  | MessageG (m, _, _, l) ->
+    Set.add (get_labels l) m.label
+  | ChoiceG (_, ls) ->
+    let labels = List.map ls ~f:get_labels in
+    let pairs = extract_pairs labels in
+    if not @@ List.for_all pairs ~f:(fun (l1, l2) -> Set.is_empty @@ Set.inter l1 l2) then 
+      uerr NonDisjointLabelsAcrossBranches
+    ; Set.union_list (module LabelName) (List.map ls ~f:get_labels)
+  | MuG (_, _, l) ->
+    get_labels l
+  | TVarG (_, _, _) ->
+    Set.empty (module LabelName)
+  | CallG (_, _, _, l) -> (* unimpl *)
+    get_labels l
+  in 
+  let _ = get_labels gt in
+  ()
 
 let merge_state ~from_state ~to_state g =
   (* check for vertex ε-transitioning to itself: V --ε--> V *)
@@ -154,8 +163,7 @@ let of_global_type_for_role gty role =
     | EndG ->
       terminate ()
     | MessageG (m, send_n, recv_n, l) ->
-      (match role with
-      | _ when RoleName.equal role send_n || RoleName.equal role recv_n ->
+      if RoleName.equal role send_n || RoleName.equal role recv_n then
         let curr = fresh () in
         let env, next = conv_gtype_aux env l in
         let a = if RoleName.equal role send_n then
@@ -168,14 +176,10 @@ let of_global_type_for_role gty role =
         let g = G.add_vertex g curr in
         let g = G.add_edge_e g e in
         ({env with g}, curr)
-      | _ ->
-        conv_gtype_aux env l)
+      else
+        conv_gtype_aux env l
     | ChoiceG (_ (* selector *), ls) ->
-      let labels = List.map ls ~f:get_labels in
-      let pairs = extract_pairs labels in
-      if not @@ List.for_all pairs ~f:(fun (l1, l2) -> Set.is_empty @@ Set.inter l1 l2) then 
-        uerr NonDisjointLabelsAcrossBranches
-      ; let curr = fresh () in
+      let curr = fresh () in
       let env, nexts = List.fold_map ~f:conv_gtype_aux ~init:env ls in
       let g = env.g in
       let es = List.map ~f:(fun n -> (curr, Epsilon, n)) nexts in
@@ -228,8 +232,9 @@ let of_global_type_for_role gty role =
       aux (0, g) env.states_to_merge
     else (start, g)
 
-let of_global_type gty all_roles _ =
-  let locals = List.map all_roles ~f:(of_global_type_for_role gty) in
+let of_global_type gty all_roles _(*role*) =
+  check_labels gty
+  ; let locals = List.map all_roles ~f:(of_global_type_for_role gty) in
   (* todo: product of these *)
   List.iter locals ~f:(fun (_, g) -> Caml.Format.print_string (show g ^ "\n")) 
   ; Caml.Format.print_string  ("\n----------\n")

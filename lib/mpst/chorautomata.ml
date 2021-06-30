@@ -3,6 +3,7 @@ open Printf
 open Gtype
 open Names
 open Graph
+open Err
 
 type c_action =
   | MsgA of RoleName.t * Gtype.message * RoleName.t
@@ -103,6 +104,28 @@ let merge_state ~from_state ~to_state g =
     let g = G.remove_vertex g from_state in
     g
 
+let rec get_labels = 
+  function 
+  | EndG ->
+    Set.empty (module LabelName)
+  | MessageG (m, _, _, l) ->
+    Set.add (get_labels l) m.label
+  | ChoiceG (_, ls) ->
+    Set.union_list (module LabelName) (List.map ls ~f:get_labels)
+  | MuG (_, _, l) ->
+    get_labels l
+  | TVarG (_, _, _) ->
+    Set.empty (module LabelName)
+  | CallG (_, _, _, l) -> (* unimpl *)
+    get_labels l
+
+let rec extract_pairs =
+  function
+  | [] -> 
+    []
+  | h :: tl ->
+    List.map tl ~f:(fun t -> (h, t)) @ extract_pairs tl
+
 let of_global_type gty role =
   let _ = role in
   let count = ref 0 in
@@ -136,7 +159,11 @@ let of_global_type gty role =
       let g = G.add_edge_e g e in
       ({env with g}, curr)
     | ChoiceG (_ (* selector *), ls) ->
-      let curr = fresh () in
+      let labels = List.map ls ~f:get_labels in
+      let pairs = extract_pairs labels in
+      if not @@ List.for_all pairs ~f:(fun (l1, l2) -> Set.is_empty @@ Set.inter l1 l2) then 
+        uerr NonDisjointLabelsAcrossBranches
+      ; let curr = fresh () in
       let env, nexts = List.fold_map ~f:conv_gtype_aux ~init:env ls in
       let g = env.g in
       let es = List.map ~f:(fun n -> (curr, Epsilon, n)) nexts in

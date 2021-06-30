@@ -74,7 +74,7 @@ let main file enumerate verbose go_path out_dir project fsm chor_automata gencod
     let () =
       gen_output_for_chor_automata ast
         (fun ast protocol role server ->
-          Nuscrlib.generate_chor_automata ast ~protocol ~role ~server |> snd |> Chorautomata.show 
+          Nuscrlib.generate_chor_automata ast ~protocol ~role ~server |> Chorautomata.show 
           )
           chor_automata
     in

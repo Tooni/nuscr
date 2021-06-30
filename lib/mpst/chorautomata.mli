@@ -4,8 +4,9 @@ open Names
 
 (** Transitions in the choreography automata *)
 type c_action =
-| MsgA of RoleName.t * Gtype.message * RoleName.t
-| Epsilon  (** Not used *)
+| SendA of RoleName.t * Gtype.message
+| RecvA of RoleName.t * Gtype.message
+| Epsilon
 
 (** Type of states in EFSM *)
 type state = int
@@ -20,7 +21,7 @@ module G :
 (** Type of the Choreography Automata *)
 type t = G.t
 
-val of_global_type : Gtype.t -> RoleName.t -> state * t
+val of_global_type : Gtype.t -> RoleName.t list -> RoleName.t -> t
 (** Construct an choreography automata from a global type *)
 
 val show : t -> string

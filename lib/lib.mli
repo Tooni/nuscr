@@ -51,7 +51,7 @@ val generate_chor_automata :
   -> protocol:ProtocolName.t
   -> role:RoleName.t
   -> server:RoleName.t
-  -> (Chorautomata.state * Chorautomata.t)
+  -> Chorautomata.t
 
 val generate_go_code :
      Syntax.scr_module

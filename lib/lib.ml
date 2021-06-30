@@ -158,8 +158,9 @@ let generate_chor_automata ast ~protocol ~role ~server =
   in
   let _ = server in
   let gp = Protocol.expand_global_protocol ast gp in
+  let all_roles = List.map ~f:RoleName.of_name gp.value.roles in
   let gt = Gtype.of_protocol gp in
-  Chorautomata.of_global_type gt role
+  Chorautomata.of_global_type gt all_roles role
 
 let generate_ocaml_code ~monad ast ~protocol ~role =
   let fsm = generate_fsm ast ~protocol ~role in

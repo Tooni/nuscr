@@ -6,15 +6,19 @@ open Graph
 open Err
 
 type c_action =
-  | MsgA of RoleName.t * Gtype.message * RoleName.t
+  | SendA of RoleName.t * Gtype.message
+  | RecvA of RoleName.t * Gtype.message
   | Epsilon
 [@@deriving ord, sexp_of]
 
-let rec show_c_action = 
+let show_c_action =
   function
-  | MsgA (p, m, q) ->
-      sprintf "%s → %s: %s" (RoleName.user p) (RoleName.user q) (Gtype.show_message m)
   | Epsilon -> "ε"
+  | (SendA (r, msg) | RecvA (r, msg)) as a ->
+    let symb =
+      match a with SendA _ -> "!" | RecvA _ -> "?" | _ -> assert false
+    in 
+    sprintf "%s%s%s" (RoleName.user r) symb (Gtype.show_message msg)
 
 module CLabel = struct
   module M = struct
@@ -73,6 +77,28 @@ let init_chor_automata_conv_env:chor_automata_conv_env =
   ; tyvars= []
   ; states_to_merge= []}
 
+let rec get_labels = 
+  function 
+  | EndG ->
+    Set.empty (module LabelName)
+  | MessageG (m, _, _, l) ->
+    Set.add (get_labels l) m.label
+  | ChoiceG (_, ls) ->
+    Set.union_list (module LabelName) (List.map ls ~f:get_labels)
+  | MuG (_, _, l) ->
+    get_labels l
+  | TVarG (_, _, _) ->
+    Set.empty (module LabelName)
+  | CallG (_, _, _, l) -> (* unimpl *)
+    get_labels l
+
+let rec extract_pairs =
+  function
+  | [] -> 
+    []
+  | h :: tl ->
+    List.map tl ~f:(fun t -> (h, t)) @ extract_pairs tl
+
 let merge_state ~from_state ~to_state g =
   (* check for vertex ε-transitioning to itself: V --ε--> V *)
   (* just delete that edge if present *)
@@ -104,29 +130,7 @@ let merge_state ~from_state ~to_state g =
     let g = G.remove_vertex g from_state in
     g
 
-let rec get_labels = 
-  function 
-  | EndG ->
-    Set.empty (module LabelName)
-  | MessageG (m, _, _, l) ->
-    Set.add (get_labels l) m.label
-  | ChoiceG (_, ls) ->
-    Set.union_list (module LabelName) (List.map ls ~f:get_labels)
-  | MuG (_, _, l) ->
-    get_labels l
-  | TVarG (_, _, _) ->
-    Set.empty (module LabelName)
-  | CallG (_, _, _, l) -> (* unimpl *)
-    get_labels l
-
-let rec extract_pairs =
-  function
-  | [] -> 
-    []
-  | h :: tl ->
-    List.map tl ~f:(fun t -> (h, t)) @ extract_pairs tl
-
-let of_global_type gty role =
+let of_global_type_for_role gty role =
   let _ = role in
   let count = ref 0 in
   let terminal = ref ~-1 in
@@ -150,14 +154,22 @@ let of_global_type gty role =
     | EndG ->
       terminate ()
     | MessageG (m, send_n, recv_n, l) ->
-      let a = MsgA (send_n, m, recv_n) in
-      let curr = fresh () in
-      let env, next = conv_gtype_aux env l in
-      let g = env.g in
-      let g = G.add_vertex g curr in
-      let e = (curr, a, next) in
-      let g = G.add_edge_e g e in
-      ({env with g}, curr)
+      (match role with
+      | _ when RoleName.equal role send_n || RoleName.equal role recv_n ->
+        let curr = fresh () in
+        let env, next = conv_gtype_aux env l in
+        let a = if RoleName.equal role send_n then
+            SendA (recv_n, m)
+          else (* if role equals recv_n *)
+            RecvA (send_n, m)
+        in
+        let e = (curr, a, next) in
+        let g = env.g in
+        let g = G.add_vertex g curr in
+        let g = G.add_edge_e g e in
+        ({env with g}, curr)
+      | _ ->
+        conv_gtype_aux env l)
     | ChoiceG (_ (* selector *), ls) ->
       let labels = List.map ls ~f:get_labels in
       let pairs = extract_pairs labels in
@@ -215,4 +227,11 @@ let of_global_type gty role =
       in
       aux (0, g) env.states_to_merge
     else (start, g)
-    
+
+let of_global_type gty all_roles _ =
+  let locals = List.map all_roles ~f:(of_global_type_for_role gty) in
+  (* todo: product of these *)
+  List.iter locals ~f:(fun (_, g) -> Caml.Format.print_string (show g ^ "\n")) 
+  ; Caml.Format.print_string  ("\n----------\n")
+  ; snd @@ List.hd_exn @@ locals
+

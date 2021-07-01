@@ -6,30 +6,15 @@ open Graph
 open Err
 
 type c_action =
-  | SendA of RoleName.t * Gtype.message
-  | RecvA of RoleName.t * Gtype.message
-  | Prod of c_action list
+  | MsgA of RoleName.t * Gtype.message * RoleName.t
   | Epsilon
 [@@deriving ord, sexp_of]
 
 let show_c_action =
-  let rec show_c_action_aux = 
-    function
-    | Epsilon -> "ε"
-    | (SendA (r, msg) | RecvA (r, msg)) as a ->
-      let symb =
-        match a with SendA _ -> "!" | RecvA _ -> "?" | _ -> assert false
-      in 
-      sprintf "%s%s%s" (RoleName.user r) symb (Gtype.show_message msg)
-    | Prod _ ->
-      assert false 
-  in
   function
-  | Prod actions ->
-    String.concat ~sep:"×" (List.map ~f:show_c_action_aux actions)
-  | _ as a ->
-    show_c_action_aux a
-
+  | Epsilon -> "ε"
+  | MsgA (p, m, q) ->
+    sprintf "%s → %s: %s" (RoleName.user p) (RoleName.user q) (Gtype.show_message m)
 
 module CLabel = struct
   module M = struct
@@ -177,11 +162,7 @@ let of_global_type_for_role gty role =
       if RoleName.equal role send_n || RoleName.equal role recv_n then
         let curr = fresh () in
         let env, next = conv_gtype_aux env l in
-        let a = if RoleName.equal role send_n then
-            SendA (recv_n, m)
-          else (* if role equals recv_n *)
-            RecvA (send_n, m)
-        in
+        let a = MsgA (send_n, m, recv_n) in
         let e = (curr, a, next) in
         let g = env.g in
         let g = G.add_vertex g curr in
@@ -285,9 +266,9 @@ let product g1 g2 =
       if Set.is_empty !r then
         g
       else
-        let (x, y) = (match (Set.nth !r 0) with 
+        let (x, y) = match (Set.nth !r 0) with 
           | Some p -> p
-          | None -> uerr (GenericError))
+          | None -> uerr (GenericError)
         in
         r := Set.remove !r (x, y) ;
         product_aux @@ List.fold alphabet ~init:g ~f:(fun g a ->

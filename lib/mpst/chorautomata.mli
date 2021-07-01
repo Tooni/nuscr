@@ -4,9 +4,7 @@ open Names
 
 (** Transitions in the choreography automata *)
 type c_action =
-| SendA of RoleName.t * Gtype.message
-| RecvA of RoleName.t * Gtype.message
-| Prod of c_action list
+| MsgA of RoleName.t * Gtype.message * RoleName.t
 | Epsilon
 
 (** Type of states in EFSM *)

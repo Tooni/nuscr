@@ -6,6 +6,7 @@ open Names
 type c_action =
 | SendA of RoleName.t * Gtype.message
 | RecvA of RoleName.t * Gtype.message
+| Prod of c_action list
 | Epsilon
 
 (** Type of states in EFSM *)

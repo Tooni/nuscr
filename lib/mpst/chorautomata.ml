@@ -8,17 +8,28 @@ open Err
 type c_action =
   | SendA of RoleName.t * Gtype.message
   | RecvA of RoleName.t * Gtype.message
+  | Prod of c_action list
   | Epsilon
 [@@deriving ord, sexp_of]
 
 let show_c_action =
+  let rec show_c_action_aux = 
+    function
+    | Epsilon -> "ε"
+    | (SendA (r, msg) | RecvA (r, msg)) as a ->
+      let symb =
+        match a with SendA _ -> "!" | RecvA _ -> "?" | _ -> assert false
+      in 
+      sprintf "%s%s%s" (RoleName.user r) symb (Gtype.show_message msg)
+    | Prod _ ->
+      assert false 
+  in
   function
-  | Epsilon -> "ε"
-  | (SendA (r, msg) | RecvA (r, msg)) as a ->
-    let symb =
-      match a with SendA _ -> "!" | RecvA _ -> "?" | _ -> assert false
-    in 
-    sprintf "%s%s%s" (RoleName.user r) symb (Gtype.show_message msg)
+  | Prod actions ->
+    String.concat ~sep:"×" (List.map ~f:show_c_action_aux actions)
+  | _ as a ->
+    show_c_action_aux a
+
 
 module CLabel = struct
   module M = struct
@@ -232,11 +243,86 @@ let of_global_type_for_role gty role =
       aux (0, g) env.states_to_merge
     else (start, g)
 
+let get_cantor_pair (k1, k2) =
+  ((k1 + k2) * (k1 + k2 + 1)) / 2 + k2
+
+module IntInt = struct
+  module T = struct
+    type t = int * int
+
+    let compare (x1, x2) (y1, y2) =
+      if x1 = y1 then 
+        Int.compare x2 y2
+      else if x1 > y1 then
+        1
+      else
+        ~-1
+    
+    let sexp_of_t (x, y) =
+      Sexp.List [Int.sexp_of_t x; Int.sexp_of_t y]
+  end
+
+  include T
+  include Comparator.Make (T)
+end
+
+let product g1 g2 =
+  if G.is_empty g1 then
+    g2
+  else if G.is_empty g2 then
+    g1
+  else
+    let alphabet = G.fold_edges_e 
+      (fun (_, label, _) labels -> label :: labels) 
+      g1 []
+    in 
+    let alphabet = G.fold_edges_e 
+      (fun (_, label, _) labels -> label :: labels) 
+      g2 alphabet
+    in
+    let r = ref @@ Set.add (Set.empty (module IntInt)) (0, 0) in
+    let rec product_aux g = 
+      if Set.is_empty !r then
+        g
+      else
+        let (x, y) = (match (Set.nth !r 0) with 
+          | Some p -> p
+          | None -> uerr (GenericError))
+        in
+        r := Set.remove !r (x, y) ;
+        product_aux @@ List.fold alphabet ~init:g ~f:(fun g a ->
+          let x_succ = G.succ_e g1 x in
+          let y_succ = G.succ_e g2 y in
+          let find_dest edges source = 
+            match (List.find edges ~f:(fun (_, label, _) -> (CLabel.compare a label) = 0)) with
+              | Some (_, _, dest) -> dest 
+              | None -> source
+          in
+          let dest_x = find_dest x_succ x in
+          let dest_y = find_dest y_succ y in
+          let prod_node = (dest_x, dest_y) in
+          let prod_node_encoded = get_cantor_pair prod_node in
+          let g =
+            if not @@ G.mem_vertex g prod_node_encoded then
+              (r := Set.add !r prod_node
+              ; G.add_vertex g prod_node_encoded)
+            else
+              g
+          in
+          let new_e = (get_cantor_pair (x, y), a, prod_node_encoded) in
+          Caml.Format.print_string  ("\n" ^ (Int.to_string @@ get_cantor_pair (x, y)) ^ "-" ^ show_c_action a ^ "-" ^ Int.to_string prod_node_encoded) ;
+          G.add_edge_e g new_e)
+    in
+    let g = G.empty in
+    let g = G.add_vertex g 0 in
+    product_aux g
+
+
 let of_global_type gty all_roles _(*role*) =
   check_labels gty
   ; let locals = List.map all_roles ~f:(of_global_type_for_role gty) in
   (* todo: product of these *)
   List.iter locals ~f:(fun (_, g) -> Caml.Format.print_string (show g ^ "\n")) 
   ; Caml.Format.print_string  ("\n----------\n")
-  ; snd @@ List.hd_exn @@ locals
+  ; List.fold locals ~init:G.empty ~f:(fun g1 (_, g2) -> product g1 g2)
 

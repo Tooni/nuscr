@@ -272,15 +272,15 @@ let product g1 g2 =
         in
         r := Set.remove !r (x, y) ;
         product_aux @@ List.fold alphabet ~init:g ~f:(fun g a ->
-          let x_succ = G.succ_e g1 x in
-          let y_succ = G.succ_e g2 y in
           let find_dest edges source = 
             match (List.find edges ~f:(fun (_, label, _) -> (CLabel.compare a label) = 0)) with
-              | Some (_, _, dest) -> dest 
-              | None -> source
+              | Some (_, _, dest) -> (dest, true)
+              | None -> (source, false)
           in
-          let dest_x = find_dest x_succ x in
-          let dest_y = find_dest y_succ y in
+          let x_succ = G.succ_e g1 x in
+          let y_succ = G.succ_e g2 y in
+          let (dest_x, found_x) = find_dest x_succ x in
+          let (dest_y, found_y) = find_dest y_succ y in
           let prod_node = (dest_x, dest_y) in
           let prod_node_encoded = get_cantor_pair prod_node in
           let g =
@@ -290,11 +290,15 @@ let product g1 g2 =
             else
               g
           in
-          let new_e = (get_cantor_pair (x, y), a, prod_node_encoded) in
-          Caml.Format.print_string  ("\n" ^ (Int.to_string @@ get_cantor_pair (x, y)) ^ "-" ^ show_c_action a ^ "-" ^ Int.to_string prod_node_encoded) ;
-          G.add_edge_e g new_e)
+          if not found_x && not found_y then (* maybe should be || ? *)
+            g
+          else 
+            let new_e = (get_cantor_pair (x, y), a, prod_node_encoded) in
+            (*Caml.Format.print_string  ("\n" ^ (Int.to_string @@ get_cantor_pair (x, y)) ^ "-" ^ show_c_action a ^ "-" ^ Int.to_string prod_node_encoded) ;*)
+            G.add_edge_e g new_e)
     in
     let g = G.empty in
+    (* cantor pair of (0,0) is 0 *)
     let g = G.add_vertex g 0 in
     product_aux g
 
@@ -302,7 +306,6 @@ let product g1 g2 =
 let of_global_type gty all_roles _(*role*) =
   check_labels gty
   ; let locals = List.map all_roles ~f:(of_global_type_for_role gty) in
-  (* todo: product of these *)
   List.iter locals ~f:(fun (_, g) -> Caml.Format.print_string (show g ^ "\n")) 
   ; Caml.Format.print_string  ("\n----------\n")
   ; List.fold locals ~init:G.empty ~f:(fun g1 (_, g2) -> product g1 g2)

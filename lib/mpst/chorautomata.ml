@@ -247,18 +247,24 @@ module IntInt = struct
   include Comparator.Make (T)
 end
 
+let label_equal a1 a2 = 
+  (CLabel.compare a1 a2) = 0
+
+(* find cartesian product of two graphs *)
+(* roughly the 2nd algorithm from http://www.iaeng.org/publication/WCECS2010/WCECS2010_pp141-143.pdf *)
+(* but uses `found_x' and `found_y' to skip some self-transitions *)
 let product g1 g2 =
   if G.is_empty g1 then
     g2
   else if G.is_empty g2 then
     g1
   else
-    let alphabet = G.fold_edges_e 
+    let alphabet = G.fold_edges_e
       (fun (_, label, _) labels -> label :: labels) 
       g1 []
     in 
-    let alphabet = G.fold_edges_e 
-      (fun (_, label, _) labels -> label :: labels) 
+    let alphabet = G.fold_edges_e
+      (fun (_, label, _) labels -> label :: labels)
       g2 alphabet
     in
     let r = ref @@ Set.add (Set.empty (module IntInt)) (0, 0) in
@@ -268,12 +274,12 @@ let product g1 g2 =
       else
         let (x, y) = match (Set.nth !r 0) with 
           | Some p -> p
-          | None -> uerr (GenericError)
+          | None -> assert false
         in
         r := Set.remove !r (x, y) ;
         product_aux @@ List.fold alphabet ~init:g ~f:(fun g a ->
           let find_dest edges source = 
-            match (List.find edges ~f:(fun (_, label, _) -> (CLabel.compare a label) = 0)) with
+            match (List.find edges ~f:(fun (_, label, _) -> label_equal label a)) with
               | Some (_, _, dest) -> (dest, true)
               | None -> (source, false)
           in
@@ -290,9 +296,10 @@ let product g1 g2 =
             else
               g
           in
-          if not found_x && not found_y then (* maybe should be || ? *)
+          (* G.iter_vertex g (fun v -> Caml.Format.print_string (Int.to_string v ^ ".")) ;*)
+          if not found_x && not found_y then
             g
-          else 
+          else
             let new_e = (get_cantor_pair (x, y), a, prod_node_encoded) in
             (*Caml.Format.print_string  ("\n" ^ (Int.to_string @@ get_cantor_pair (x, y)) ^ "-" ^ show_c_action a ^ "-" ^ Int.to_string prod_node_encoded) ;*)
             G.add_edge_e g new_e)
@@ -300,13 +307,55 @@ let product g1 g2 =
     let g = G.empty in
     (* cantor pair of (0,0) is 0 *)
     let g = G.add_vertex g 0 in
-    product_aux g
+    product_aux g (* todo: maybe go over again and make state numbers smaller *)
 
+(* `trims' global product to remove transitions/states that break data dependencies. *)
+(* Traverses global product (g) while traversing through equivalent transitions in local graphs (gs). *)
+(* For each global transition, only adds to resultant trimmed graph if transition was 
+   also possible in two local graphs, i.e. the send and the receive *)
+let trim g gs =
+  let ids_to_gs = Map.of_alist_exn (module Int) @@ List.mapi gs ~f:(fun i g -> (i, g)) in
+  let rec trim_aux global_s local_ss result_g seen = 
+    let global_es = G.succ_e g global_s in
+    let local_es = Map.fold local_ss ~init:[] 
+      ~f:(fun ~key:id ~data:s ->
+        let g = Map.find_exn ids_to_gs id in
+        List.cons (id, G.succ_e g s))
+    in
+    List.fold global_es ~init:result_g 
+      ~f:(fun result_g ((_, global_a, dest) as e) ->
+        let matching_locals = List.filter_map local_es 
+          ~f:(fun (g, es) -> 
+            match List.find es ~f:(fun (_, local_a, _) -> label_equal local_a global_a) with
+            | Some (_, _, dest') -> Some (g, dest')
+            | None -> None)
+        in
+        if List.length matching_locals = 2 then
+          let result_g = G.add_edge_e result_g e in
+          let global_s = dest in
+          let local_ss = List.fold matching_locals ~init:local_ss 
+            ~f:(fun local_ss (id, s) -> Map.set local_ss ~key:id ~data:s) 
+          in
+          if List.mem seen global_s ~equal:(=) then 
+            result_g
+          else
+            trim_aux global_s local_ss result_g (dest :: seen)
+        else
+          result_g)
+  in
+  let global_s = 0 in
+  (* mapping ids to starts *)
+  let local_ss = Map.of_alist_exn (module Int) @@ List.map (Map.keys ids_to_gs) ~f:(fun id -> (id, 0)) in
+  let result_g = G.empty in
+  let seen = [] in
+  trim_aux global_s local_ss result_g seen
 
 let of_global_type gty all_roles _(*role*) =
   check_labels gty
-  ; let locals = List.map all_roles ~f:(of_global_type_for_role gty) in
-  List.iter locals ~f:(fun (_, g) -> Caml.Format.print_string (show g ^ "\n")) 
-  ; Caml.Format.print_string  ("\n----------\n")
-  ; List.fold locals ~init:G.empty ~f:(fun g1 (_, g2) -> product g1 g2)
+  ; let locals = List.map ~f:snd @@ List.map ~f:(of_global_type_for_role gty) all_roles in
+  (*List.iter locals ~f:(fun g -> Caml.Format.print_string (show g ^ "\n")) 
+  ; Caml.Format.print_string  ("\n----------\n"); *)
+  let naive_product = List.fold locals ~init:G.empty ~f:(fun g1 g2 -> product g1 g2) in
+  let trimmed_product = trim naive_product locals in
+  trimmed_product
 

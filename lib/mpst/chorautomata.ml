@@ -248,7 +248,7 @@ module IntInt = struct
 end
 
 let label_equal a1 a2 = 
-  (CLabel.compare a1 a2) = 0
+  CLabel.compare a1 a2 = 0
 
 (* find cartesian product of two graphs *)
 (* roughly the 2nd algorithm from http://www.iaeng.org/publication/WCECS2010/WCECS2010_pp141-143.pdf *)
@@ -259,55 +259,53 @@ let product g1 g2 =
   else if G.is_empty g2 then
     g1
   else
-    let alphabet = G.fold_edges_e
-      (fun (_, label, _) labels -> label :: labels) 
-      g1 []
-    in 
-    let alphabet = G.fold_edges_e
-      (fun (_, label, _) labels -> label :: labels)
-      g2 alphabet
+    let all_labels g = 
+      G.fold_edges_e
+        (fun (_, label, _) -> List.cons label) 
+        g []
     in
-    let r = ref @@ Set.add (Set.empty (module IntInt)) (0, 0) in
-    let rec product_aux g = 
-      if Set.is_empty !r then
+    let alphabet = all_labels g1 @ all_labels g2 in
+    let rec product_aux (g, r) = 
+      if Set.is_empty r then
         g
       else
-        let (x, y) = match (Set.nth !r 0) with 
+        let (x, y) = match Set.nth r 0 with 
           | Some p -> p
           | None -> assert false
         in
-        r := Set.remove !r (x, y) ;
-        product_aux @@ List.fold alphabet ~init:g ~f:(fun g a ->
-          let find_dest edges source = 
-            match (List.find edges ~f:(fun (_, label, _) -> label_equal label a)) with
-              | Some (_, _, dest) -> (dest, true)
-              | None -> (source, false)
-          in
-          let x_succ = G.succ_e g1 x in
-          let y_succ = G.succ_e g2 y in
-          let (dest_x, found_x) = find_dest x_succ x in
-          let (dest_y, found_y) = find_dest y_succ y in
-          let prod_node = (dest_x, dest_y) in
-          let prod_node_encoded = get_cantor_pair prod_node in
-          let g =
-            if not @@ G.mem_vertex g prod_node_encoded then
-              (r := Set.add !r prod_node
-              ; G.add_vertex g prod_node_encoded)
+        let r = Set.remove r (x, y) in
+        product_aux @@ List.fold alphabet ~init:(g, r) 
+          ~f:(fun (g, r) a ->
+            let find_dest edges source = 
+              match (List.find edges ~f:(fun (_, label, _) -> label_equal label a)) with
+                | Some (_, _, dest) -> (dest, true)
+                | None -> (source, false)
+            in
+            let x_succ = G.succ_e g1 x in
+            let y_succ = G.succ_e g2 y in
+            let (dest_x, found_x) = find_dest x_succ x in
+            let (dest_y, found_y) = find_dest y_succ y in
+            let prod_node = (dest_x, dest_y) in
+            let prod_node_encoded = get_cantor_pair prod_node in
+            let (g, r) =
+              if not @@ G.mem_vertex g prod_node_encoded then
+                (G.add_vertex g prod_node_encoded, Set.add r prod_node)
+              else
+                (g, r)
+            in
+            (* G.iter_vertex g (fun v -> Caml.Format.print_string (Int.to_string v ^ ".")) ;*)
+            if not found_x && not found_y then
+              (g, r)
             else
-              g
-          in
-          (* G.iter_vertex g (fun v -> Caml.Format.print_string (Int.to_string v ^ ".")) ;*)
-          if not found_x && not found_y then
-            g
-          else
-            let new_e = (get_cantor_pair (x, y), a, prod_node_encoded) in
-            (*Caml.Format.print_string  ("\n" ^ (Int.to_string @@ get_cantor_pair (x, y)) ^ "-" ^ show_c_action a ^ "-" ^ Int.to_string prod_node_encoded) ;*)
-            G.add_edge_e g new_e)
+              let new_e = (get_cantor_pair (x, y), a, prod_node_encoded) in
+              (*Caml.Format.print_string  ("\n" ^ (Int.to_string @@ get_cantor_pair (x, y)) ^ "-" ^ show_c_action a ^ "-" ^ Int.to_string prod_node_encoded) ;*)
+              (G.add_edge_e g new_e, r))
     in
     let g = G.empty in
     (* cantor pair of (0,0) is 0 *)
     let g = G.add_vertex g 0 in
-    product_aux g (* todo: maybe go over again and make state numbers smaller *)
+    let r = Set.add (Set.empty (module IntInt)) (0, 0) in
+    product_aux (g, r) (* todo: maybe go over again and make state numbers smaller *)
 
 (* `trims' global product to remove transitions/states that break data dependencies. *)
 (* Traverses global product (g) while traversing through equivalent transitions in local graphs (gs). *)

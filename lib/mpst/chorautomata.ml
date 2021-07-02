@@ -250,7 +250,7 @@ end
 let label_equal a1 a2 = 
   CLabel.compare a1 a2 = 0
 
-(* find cartesian product of two graphs *)
+(* Find cartesian product of two graphs *)
 (* roughly the 2nd algorithm from http://www.iaeng.org/publication/WCECS2010/WCECS2010_pp141-143.pdf *)
 (* but uses `found_x' and `found_y' to skip some self-transitions *)
 let product g1 g2 =
@@ -259,13 +259,25 @@ let product g1 g2 =
   else if G.is_empty g2 then
     g1
   else
+    let count = ref 1 in
+    let fresh () =
+      let n = !count in
+      count := n + 1 ;
+      n
+    in
     let all_labels g = 
       G.fold_edges_e
         (fun (_, label, _) -> List.cons label) 
         g []
     in
     let alphabet = all_labels g1 @ all_labels g2 in
-    let rec product_aux (g, r) = 
+    (* cantor pair of (0,0) is 0 *)
+    let g = G.add_vertex G.empty 0 in
+    let r = Set.add (Set.empty (module IntInt)) (0, 0) in
+    (* map cantor pairs to nodes *)
+    (* don't use cantor pairs directly as nodes because they get very large in successive products *)
+    let m = Map.add_exn (Map.empty (module Int)) ~key:0 ~data:0 in
+    let rec product_aux (g, r, m) = 
       if Set.is_empty r then
         g
       else
@@ -274,8 +286,8 @@ let product g1 g2 =
           | None -> assert false
         in
         let r = Set.remove r (x, y) in
-        product_aux @@ List.fold alphabet ~init:(g, r) 
-          ~f:(fun (g, r) a ->
+        product_aux @@ List.fold alphabet ~init:(g, r, m) 
+          ~f:(fun (g, r, m) a ->
             let find_dest edges source = 
               match (List.find edges ~f:(fun (_, label, _) -> label_equal label a)) with
                 | Some (_, _, dest) -> (dest, true)
@@ -287,25 +299,26 @@ let product g1 g2 =
             let (dest_y, found_y) = find_dest y_succ y in
             let prod_node = (dest_x, dest_y) in
             let prod_node_encoded = get_cantor_pair prod_node in
-            let (g, r) =
-              if not @@ G.mem_vertex g prod_node_encoded then
-                (G.add_vertex g prod_node_encoded, Set.add r prod_node)
+            let (g, r, m) =
+              if not @@ Map.mem m prod_node_encoded then
+                let curr = fresh () in
+                (G.add_vertex g curr, 
+                 Set.add r prod_node,
+                 Map.set m ~key:prod_node_encoded ~data:curr)
               else
-                (g, r)
+                (g, r, m)
             in
             (* G.iter_vertex g (fun v -> Caml.Format.print_string (Int.to_string v ^ ".")) ;*)
             if not found_x && not found_y then
-              (g, r)
+              (g, r, m)
             else
-              let new_e = (get_cantor_pair (x, y), a, prod_node_encoded) in
+              let e_source = Map.find_exn m @@ get_cantor_pair (x, y) in
+              let e_dest = Map.find_exn m prod_node_encoded in
+              let new_e = (e_source, a, e_dest) in
               (*Caml.Format.print_string  ("\n" ^ (Int.to_string @@ get_cantor_pair (x, y)) ^ "-" ^ show_c_action a ^ "-" ^ Int.to_string prod_node_encoded) ;*)
-              (G.add_edge_e g new_e, r))
+              (G.add_edge_e g new_e, r, m))
     in
-    let g = G.empty in
-    (* cantor pair of (0,0) is 0 *)
-    let g = G.add_vertex g 0 in
-    let r = Set.add (Set.empty (module IntInt)) (0, 0) in
-    product_aux (g, r) (* todo: maybe go over again and make state numbers smaller *)
+    product_aux (g, r, m)
 
 (* `trims' global product to remove transitions/states that break data dependencies. *)
 (* Traverses global product (g) while traversing through equivalent transitions in local graphs (gs). *)

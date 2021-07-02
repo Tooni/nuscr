@@ -3,7 +3,6 @@ open Loc
 open Names
 
 type user_error =
-  | GenericError
   | NonDisjointLabelsAcrossBranches 
   | UnknownPragma of string
   | IncompatibleFlag of string * string
@@ -42,8 +41,6 @@ exception UserError of user_error
 [@@deriving sexp_of]
 
 let show_user_error = function
-  | GenericError ->
-      "GenericError"
   | NonDisjointLabelsAcrossBranches ->
       "The sets of labels of each branch should be disjoint from one another."
   | UnknownPragma prg -> "Unknown pragma: " ^ prg

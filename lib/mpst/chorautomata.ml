@@ -224,28 +224,9 @@ let of_global_type_for_role gty role =
       aux (0, g) env.states_to_merge
     else (start, g)
 
+(* https://en.wikipedia.org/wiki/Pairing_function#Cantor_pairing_function *)
 let get_cantor_pair (k1, k2) =
   ((k1 + k2) * (k1 + k2 + 1)) / 2 + k2
-
-module IntInt = struct
-  module T = struct
-    type t = int * int
-
-    let compare (x1, x2) (y1, y2) =
-      if x1 = y1 then 
-        Int.compare x2 y2
-      else if x1 > y1 then
-        1
-      else
-        ~-1
-    
-    let sexp_of_t (x, y) =
-      Sexp.List [Int.sexp_of_t x; Int.sexp_of_t y]
-  end
-
-  include T
-  include Comparator.Make (T)
-end
 
 let label_equal a1 a2 = 
   CLabel.compare a1 a2 = 0
@@ -267,44 +248,41 @@ let product g1 g2 =
     in
     let all_labels g = 
       G.fold_edges_e
-        (fun (_, label, _) -> List.cons label) 
+        (fun (_, label, _) -> List.cons label)
         g []
     in
     let alphabet = all_labels g1 @ all_labels g2 in
     (* cantor pair of (0,0) is 0 *)
     let g = G.add_vertex G.empty 0 in
-    let r = Set.add (Set.empty (module IntInt)) (0, 0) in
-    (* map cantor pairs to nodes *)
-    (* don't use cantor pairs directly as nodes because they get very large in successive products *)
+    let r = [(0, 0)] in
+    (* `m' maps cantor pairs to nodes *)
+    (* can't use cantor pairs directly as nodes because they'd get very large in successive products *)
     let m = Map.add_exn (Map.empty (module Int)) ~key:0 ~data:0 in
     let rec product_aux (g, r, m) = 
-      if Set.is_empty r then
+      if List.is_empty r then
         g
       else
-        let (x, y) = match Set.nth r 0 with 
-          | Some p -> p
-          | None -> assert false
-        in
-        let r = Set.remove r (x, y) in
+        let (x, y) as prod_src = List.hd_exn r in
+        let r = List.tl_exn r in
         product_aux @@ List.fold alphabet ~init:(g, r, m) 
           ~f:(fun (g, r, m) a ->
-            let find_dest edges source = 
+            let find_dest edges src = 
               match (List.find edges ~f:(fun (_, label, _) -> label_equal label a)) with
                 | Some (_, _, dest) -> (dest, true)
-                | None -> (source, false)
+                | None -> (src, false)
             in
             let x_succ = G.succ_e g1 x in
             let y_succ = G.succ_e g2 y in
             let (dest_x, found_x) = find_dest x_succ x in
             let (dest_y, found_y) = find_dest y_succ y in
-            let prod_node = (dest_x, dest_y) in
-            let prod_node_encoded = get_cantor_pair prod_node in
+            let prod_dest = (dest_x, dest_y) in
+            let prod_dest_encoded = get_cantor_pair prod_dest in
             let (g, r, m) =
-              if not @@ Map.mem m prod_node_encoded then
+              if not @@ Map.mem m prod_dest_encoded then
                 let curr = fresh () in
                 (G.add_vertex g curr, 
-                 Set.add r prod_node,
-                 Map.set m ~key:prod_node_encoded ~data:curr)
+                 prod_dest :: r,
+                 Map.set m ~key:prod_dest_encoded ~data:curr)
               else
                 (g, r, m)
             in
@@ -312,9 +290,9 @@ let product g1 g2 =
             if not found_x && not found_y then
               (g, r, m)
             else
-              let e_source = Map.find_exn m @@ get_cantor_pair (x, y) in
-              let e_dest = Map.find_exn m prod_node_encoded in
-              let new_e = (e_source, a, e_dest) in
+              let e_src = Map.find_exn m @@ get_cantor_pair prod_src in
+              let e_dest = Map.find_exn m prod_dest_encoded in
+              let new_e = (e_src, a, e_dest) in
               (*Caml.Format.print_string  ("\n" ^ (Int.to_string @@ get_cantor_pair (x, y)) ^ "-" ^ show_c_action a ^ "-" ^ Int.to_string prod_node_encoded) ;*)
               (G.add_edge_e g new_e, r, m))
     in

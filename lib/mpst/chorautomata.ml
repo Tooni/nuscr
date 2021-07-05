@@ -67,10 +67,12 @@ let show g =
 type chor_automata_conv_env =
   { g: G.t
   ; tyvars: (TypeVariableName.t * int) list
+  ; alphabet: c_action list
   ; states_to_merge: (int * int) list }
 let init_chor_automata_conv_env:chor_automata_conv_env =
   { g= G.empty
   ; tyvars= []
+  ; alphabet= []
   ; states_to_merge= []}
 
 
@@ -136,7 +138,6 @@ let merge_state ~from_state ~to_state g =
     g
 
 let of_global_type_for_role gty role =
-  let _ = role in
   let count = ref 0 in
   let terminal = ref ~-1 in
   let fresh () =
@@ -145,7 +146,7 @@ let of_global_type_for_role gty role =
     n
   in
   let rec conv_gtype_aux env = 
-    let {g; tyvars; _} = env in
+    let {g; tyvars; alphabet; _} = env in
     let terminate () =
       if !terminal = ~-1 then
         let curr = fresh () in
@@ -161,8 +162,9 @@ let of_global_type_for_role gty role =
     | MessageG (m, send_n, recv_n, l) ->
       if RoleName.equal role send_n || RoleName.equal role recv_n then
         let curr = fresh () in
-        let env, next = conv_gtype_aux env l in
         let a = MsgA (send_n, m, recv_n) in
+        let alphabet = a :: alphabet in
+        let env, next = conv_gtype_aux {env with alphabet} l in
         let e = (curr, a, next) in
         let g = env.g in
         let g = G.add_vertex g curr in
@@ -170,7 +172,7 @@ let of_global_type_for_role gty role =
         ({env with g}, curr)
       else
         conv_gtype_aux env l
-    | ChoiceG (_ (* selector *), ls) ->
+    | ChoiceG (_, ls) ->
       let curr = fresh () in
       let env, nexts = List.fold_map ~f:conv_gtype_aux ~init:env ls in
       let g = env.g in
@@ -200,11 +202,12 @@ let of_global_type_for_role gty role =
     | CallG (_, _, _, l) -> (* unimpl *)
       conv_gtype_aux env l
     in
-    let env, start = conv_gtype_aux init_chor_automata_conv_env gty in
+    let env, _ = conv_gtype_aux init_chor_automata_conv_env gty in
     let g = env.g in
+    let alphabet = env.alphabet in
     if not @@ List.is_empty env.states_to_merge then
       let rec aux (start, g) = function
-        | [] -> (start, g)
+        | [] -> (alphabet, g)
         | (s1, s2) :: rest ->
             let to_state = Int.min s1 s2 in
             let from_state = Int.max s1 s2 in
@@ -222,7 +225,7 @@ let of_global_type_for_role gty role =
             aux (start, g) rest
       in
       aux (0, g) env.states_to_merge
-    else (start, g)
+    else (alphabet, g)
 
 (* https://en.wikipedia.org/wiki/Pairing_function#Cantor_pairing_function *)
 let get_cantor_pair (k1, k2) =
@@ -234,11 +237,11 @@ let label_equal a1 a2 =
 (* Find cartesian product of two graphs *)
 (* roughly the 2nd algorithm from http://www.iaeng.org/publication/WCECS2010/WCECS2010_pp141-143.pdf *)
 (* but uses `found_x' and `found_y' to skip some self-transitions *)
-let product g1 g2 =
+let product (a1, g1) (a2, g2) =
   if G.is_empty g1 then
-    g2
+    (a2, g2)
   else if G.is_empty g2 then
-    g1
+    (a1, g1)
   else
     let count = ref 1 in
     let fresh () =
@@ -246,12 +249,7 @@ let product g1 g2 =
       count := n + 1 ;
       n
     in
-    let all_labels g = 
-      G.fold_edges_e
-        (fun (_, label, _) -> List.cons label)
-        g []
-    in
-    let alphabet = all_labels g1 @ all_labels g2 in
+    let alphabet = a1 @ a2 in
     (* cantor pair of (0,0) is 0 *)
     let g = G.add_vertex G.empty 0 in
     let r = [(0, 0)] in
@@ -260,7 +258,7 @@ let product g1 g2 =
     let m = Map.add_exn (Map.empty (module Int)) ~key:0 ~data:0 in
     let rec product_aux (g, r, m) = 
       if List.is_empty r then
-        g
+        (alphabet, g)
       else
         let (x, y) as prod_src = List.hd_exn r in
         let r = List.tl_exn r in
@@ -280,20 +278,18 @@ let product g1 g2 =
             let (g, r, m) =
               if not @@ Map.mem m prod_dest_encoded then
                 let curr = fresh () in
-                (G.add_vertex g curr, 
+                (G.add_vertex g curr,
                  prod_dest :: r,
                  Map.set m ~key:prod_dest_encoded ~data:curr)
               else
                 (g, r, m)
             in
-            (* G.iter_vertex g (fun v -> Caml.Format.print_string (Int.to_string v ^ ".")) ;*)
             if not found_x && not found_y then
               (g, r, m)
             else
               let e_src = Map.find_exn m @@ get_cantor_pair prod_src in
               let e_dest = Map.find_exn m prod_dest_encoded in
               let new_e = (e_src, a, e_dest) in
-              (*Caml.Format.print_string  ("\n" ^ (Int.to_string @@ get_cantor_pair (x, y)) ^ "-" ^ show_c_action a ^ "-" ^ Int.to_string prod_node_encoded) ;*)
               (G.add_edge_e g new_e, r, m))
     in
     product_aux (g, r, m)
@@ -314,9 +310,9 @@ let trim g gs =
     List.fold global_es ~init:result_g 
       ~f:(fun result_g ((_, global_a, dest) as e) ->
         let matching_locals = List.filter_map local_es 
-          ~f:(fun (g, es) -> 
+          ~f:(fun (id, es) -> 
             match List.find es ~f:(fun (_, local_a, _) -> label_equal local_a global_a) with
-            | Some (_, _, dest') -> Some (g, dest')
+            | Some (_, _, dest') -> Some (id, dest')
             | None -> None)
         in
         if List.length matching_locals = 2 then
@@ -341,10 +337,10 @@ let trim g gs =
 
 let of_global_type gty all_roles _(*role*) =
   check_labels gty
-  ; let locals = List.map ~f:snd @@ List.map ~f:(of_global_type_for_role gty) all_roles in
+  ; let locals = List.map ~f:(of_global_type_for_role gty) all_roles in
   (*List.iter locals ~f:(fun g -> Caml.Format.print_string (show g ^ "\n")) 
   ; Caml.Format.print_string  ("\n----------\n"); *)
-  let naive_product = List.fold locals ~init:G.empty ~f:(fun g1 g2 -> product g1 g2) in
-  let trimmed_product = trim naive_product locals in
+  let (_, naive_product) = List.fold locals ~init:([], G.empty) ~f:product in
+  let trimmed_product = trim naive_product (List.map ~f:snd locals) in
   trimmed_product
 
